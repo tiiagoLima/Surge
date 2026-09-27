@@ -190,6 +190,11 @@ def main() -> None:
     s_parser = subparsers.add_parser("scan", help="Run scans")
     s_parser.add_argument("--portfolio", action="store_true", help="Scan portfolio holdings")
     s_parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Run the selected scans once and exit",
+    )
+    s_parser.add_argument(
         "--radar", action="store_true", help="Scan market radar (Brapi list, excludes holdings)"
     )
 
