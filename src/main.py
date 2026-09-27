@@ -10,25 +10,25 @@ import argparse
 import logging
 import sys
 
-from src.adapters.inbound.imap_inbox_adapter import ImapInboxAdapter
-from src.adapters.inbound.scheduler_trigger import SchedulerTrigger
-from src.adapters.outbound.brapi_adapter import BrapiAdapter
-from src.adapters.outbound.composite_notifier import CompositeNotifier
-from src.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
-from src.adapters.outbound.email_notifier import EmailNotifier
-from src.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
-from src.adapters.outbound.sqlite_repository import SqliteRepository
-from src.adapters.outbound.telegram_notifier import TelegramNotifier
-from src.adapters.outbound.yfinance_adapter import YFinanceAdapter
-from src.application.portfolio.manage_portfolio_use_case import ManagePortfolioUseCase
-from src.application.portfolio.process_investment_emails_use_case import (
+from src.investments.adapters.inbound.imap_inbox_adapter import ImapInboxAdapter
+from src.investments.adapters.inbound.scheduler_trigger import SchedulerTrigger
+from src.investments.adapters.outbound.brapi_adapter import BrapiAdapter
+from src.investments.adapters.outbound.composite_notifier import CompositeNotifier
+from src.investments.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
+from src.investments.adapters.outbound.email_notifier import EmailNotifier
+from src.investments.adapters.outbound.sqlite_repository import SqliteRepository
+from src.investments.adapters.outbound.telegram_notifier import TelegramNotifier
+from src.investments.adapters.outbound.yfinance_adapter import YFinanceAdapter
+from src.investments.application.manage_portfolio_use_case import ManagePortfolioUseCase
+from src.investments.application.market_radar_use_case import MarketRadarUseCase
+from src.investments.application.process_investment_emails_use_case import (
     ProcessInvestmentEmailsUseCase,
 )
-from src.application.memory.save_preference_use_case import SavePreferenceUseCase
-from src.application.memory.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
-from src.application.portfolio.scan_portfolio_use_case import ScanPortfolioUseCase
-from src.application.radar.market_radar_use_case import MarketRadarUseCase
-from src.config import get_settings
+from src.investments.application.scan_portfolio_use_case import ScanPortfolioUseCase
+from src.memory.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
+from src.memory.application.save_preference_use_case import SavePreferenceUseCase
+from src.memory.application.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
+from src.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +299,7 @@ def _make_fake_opportunities() -> list:
     """Generate synthetic opportunities for preview/test purposes."""
     from datetime import UTC, datetime
 
-    from src.domain.models import Opportunity, Quote
+    from src.investments.domain.models import Opportunity, Quote
 
     now = datetime.now(UTC)
     quotes = [
@@ -339,8 +339,8 @@ def _cmd_test_email(args: argparse.Namespace) -> None:
 
     settings = get_settings()
 
-    from src.adapters.outbound.composite_notifier import CompositeNotifier
-    from src.adapters.outbound.email_notifier import EmailNotifier
+    from src.investments.adapters.outbound.composite_notifier import CompositeNotifier
+    from src.investments.adapters.outbound.email_notifier import EmailNotifier
 
     _, _, _, notification_port, _ = _build_ports()
 
@@ -371,7 +371,7 @@ def _cmd_test_email(args: argparse.Namespace) -> None:
     if args.preview:
         html = email_notifier.render_opportunities_html(opps)
         if not html:
-            print("Erro: template HTML não encontrado em src/assets/templates/")
+            print("Erro: template HTML não encontrado em src/investments/assets/templates/")
             return
         with tempfile.NamedTemporaryFile(
             suffix="_surge_email_preview.html",

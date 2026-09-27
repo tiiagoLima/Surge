@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.adapters.outbound.yfinance_adapter import YFinanceAdapter
+from src.investments.adapters.outbound.yfinance_adapter import YFinanceAdapter
 
 pytestmark = pytest.mark.integration
 

@@ -1,8 +1,8 @@
 """Unit tests for the semantic memory foundation."""
 
-from src.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
-from src.application.memory.save_preference_use_case import SavePreferenceUseCase
-from src.application.memory.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
+from src.memory.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
+from src.memory.application.save_preference_use_case import SavePreferenceUseCase
+from src.memory.application.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
 
 
 def test_save_and_search_preference_context() -> None:

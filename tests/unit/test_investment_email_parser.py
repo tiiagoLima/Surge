@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from src.domain.email_models import InvestmentEmailParser
+from src.investments.domain.email_models import InvestmentEmailParser
 
 
 def test_parser_extracts_purchase():

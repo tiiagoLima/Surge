@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from src.domain.models import Holding, Opportunity, Quote
+from src.investments.domain.models import Holding, Opportunity, Quote
 
 
 def _quote(price: float = 95.0, prev: float = 100.0) -> Quote:
