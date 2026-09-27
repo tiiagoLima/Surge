@@ -1,6 +1,6 @@
 """Unit tests for config parsing."""
 
-from src.config import Settings
+from src.shared.config import Settings
 
 
 def test_drop_threshold_default():

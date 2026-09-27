@@ -2,18 +2,20 @@
 
 > Siga este passo a passo para adicionar um caso de uso sem quebrar Hexagonal/DDD. Leia `docs/spec.md` antes.
 
-## 1. Modelar o domínio
+## 1. Escolher o bounded context e modelar o domínio
 
-Crie/edite `src/domain/models.py`:
+Antes de criar arquivos, defina o contexto delimitado. Reutilize `src/investments/` para carteira, cotações e alertas; use `src/memory/` para memória semântica. Para um conceito novo e independente, crie `src/<contexto>/` com seu próprio hexágono.
+
+Crie/edite `src/<contexto>/domain/models.py`:
 - Entidades como `@dataclass(frozen=True)`
 - Value objects imutáveis
 - Métodos ricos (ex: `is_significant_drop()` em `Quote`) — não apenas dados
 
-Se o novo módulo tem conceito conflitante (ex: "Ticker" diferente), avalie bounded context, mas por ora mantenha no mesmo `domain/`.
+Se o novo módulo tem conceito conflitante (ex: um `Ticker` com significado diferente), crie ou use outro bounded context; não compartilhe modelos de domínio entre contexts.
 
 ## 2. Definir portas (ISP estrito)
 
-Edite `src/domain/ports.py`:
+Edite `src/<contexto>/domain/ports.py`:
 ```python
 class MyPort(ABC):
     @abstractmethod
@@ -27,9 +29,9 @@ métodos estritos da sua porta.
 
 ## 3. Criar o UseCase (agnóstico à entrada — ChatOps-ready)
 
-Crie `src/application/<meu_modulo>/use_case.py`:
+Crie `src/<contexto>/application/<meu_modulo>_use_case.py`:
 ```python
-from src.domain.ports import MyPort
+from src.<contexto>.domain.ports import MyPort
 
 class MyUseCase:
     def __init__(self, port: MyPort) -> None:
@@ -50,9 +52,9 @@ class MyUseCase:
 
 ## 4. Implementar adapters
 
-Crie em `src/adapters/outbound/` (ou `inbound/` para gatilhos):
+Crie em `src/<contexto>/adapters/outbound/` (ou `inbound/` para gatilhos):
 ```python
-from src.domain.ports import MyPort
+from src.<contexto>.domain.ports import MyPort
 
 class MyAdapter(MyPort):
     def do_something(self, ...) -> ...:
@@ -66,7 +68,7 @@ class MyAdapter(MyPort):
 Edite `src/main.py`:
 - Instancie adapters concretos
 - Injete nos UseCases
-- Adicione trigger (scheduler, webhook, email) em `adapters/inbound/`
+- Adicione trigger (scheduler, webhook, email) em `src/<contexto>/adapters/inbound/`
 
 ## 6. Testes
 
@@ -75,7 +77,7 @@ Edite `src/main.py`:
 
 ## 7. Config
 
-Se precisar de env vars, adicione em `src/config.py` (`Settings`) e documente em `.env.example`.
+Se precisar de env vars, adicione em `src/shared/config.py` (`Settings`) e documente em `.env.example`.
 
 ## Checklist
 

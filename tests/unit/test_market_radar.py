@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime
 
-from src.application.radar.market_radar_use_case import MarketRadarUseCase
-from src.domain.models import Holding, Opportunity, Quote
-from src.domain.ports import NotificationPort, PortfolioPort, QuotePort, StoragePort
+from src.investments.application.market_radar_use_case import MarketRadarUseCase
+from src.investments.domain.models import Holding, Opportunity, Quote
+from src.investments.domain.ports import NotificationPort, PortfolioPort, QuotePort, StoragePort
 
 
 class FakePortfolio(PortfolioPort):

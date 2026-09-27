@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime
 
-from src.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
-from src.domain.models import Quote
-from src.domain.ports import QuotePort
+from src.investments.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
+from src.investments.domain.models import Quote
+from src.investments.domain.ports import QuotePort
 
 
 class FakeQuotePort(QuotePort):

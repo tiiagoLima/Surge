@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime
 
-from src.application.portfolio.manage_portfolio_use_case import ManagePortfolioUseCase
-from src.domain.models import Holding, Quote
-from src.domain.ports import PortfolioPort, QuotePort
+from src.investments.application.manage_portfolio_use_case import ManagePortfolioUseCase
+from src.investments.domain.models import Holding, Quote
+from src.investments.domain.ports import PortfolioPort, QuotePort
 
 
 class FakePortfolio(PortfolioPort):

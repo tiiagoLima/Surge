@@ -2,8 +2,8 @@
 
 from datetime import UTC, datetime
 
-from src.adapters.outbound.sqlite_repository import SqliteRepository
-from src.domain.models import Holding
+from src.investments.adapters.outbound.sqlite_repository import SqliteRepository
+from src.investments.domain.models import Holding
 
 
 def _holding(ticker: str = "PETR4.SA", qty: float = 100, avg: float | None = 28.5) -> Holding:

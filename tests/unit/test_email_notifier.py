@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.adapters.outbound.email_notifier import EmailNotifier
-from src.domain.models import Opportunity, Quote
+from src.investments.adapters.outbound.email_notifier import EmailNotifier
+from src.investments.domain.models import Opportunity, Quote
 
 
 def _make_quote(ticker: str = "PETR4.SA", price: float = 28.40, prev: float = 31.20) -> Quote:
@@ -69,7 +69,9 @@ class TestHTMLRendering:
 
     @pytest.fixture
     def notifier_with_templates(self) -> EmailNotifier:
-        templates_dir = Path(__file__).resolve().parents[2] / "src" / "assets" / "templates"
+        templates_dir = (
+            Path(__file__).resolve().parents[2] / "src" / "investments" / "assets" / "templates"
+        )
         return _notifier(templates_dir=templates_dir)
 
     def test_render_opportunities_html_contains_ticker(self, notifier_with_templates):
@@ -106,7 +108,9 @@ class TestNotifyHTMLMultipart:
 
     @pytest.fixture
     def notifier_with_templates(self) -> EmailNotifier:
-        templates_dir = Path(__file__).resolve().parents[2] / "src" / "assets" / "templates"
+        templates_dir = (
+            Path(__file__).resolve().parents[2] / "src" / "investments" / "assets" / "templates"
+        )
         return _notifier(templates_dir=templates_dir)
 
     def test_notify_sends_multipart_with_html(self, notifier_with_templates):
