@@ -47,9 +47,10 @@ python -m src.main portfolio add PETR4.SA --qty 100 --avg 30
 python -m src.main portfolio list
 
 # 5. Scans avulsos
-python -m src.main scan --portfolio   # só holdings
-python -m src.main scan --radar       # mercado (Brapi), exclui carteira
-python -m src.main scan               # ambos
+python -m src.main scan --portfolio          # só holdings
+python -m src.main scan --radar              # mercado (Brapi), exclui carteira
+python -m src.main scan --once               # ambos, uma única execução
+python -m src.main scan                      # ambos, uma única execução
 
 # 6. Rodar com scheduler (todo dia útil 18h, portfolio + radar)
 python -m src.main
@@ -68,7 +69,7 @@ surge test-email --preview
 surge test-email --send
 ```
 
-Os templates HTML ficam em `src/assets/templates/` e são renderizados com **Jinja2**.  
+Os templates HTML ficam em `src/investments/assets/templates/` e são renderizados com **Jinja2**.
 O design segue estilo Dark Mode financeiro, com badges vermelhos/verdes, tabela responsiva e header com a marca Surge.
 
 ## Docker
@@ -106,7 +107,7 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 | Config | `pydantic-settings` + `.env` |
 | Cotações | `yfinance` + Brapi (fallback composto) |
 | Notificação | SMTP (`smtplib`) + Telegram Bot API |
-| Templates HTML | **Jinja2** (`src/assets/templates/`) |
+| Templates HTML | **Jinja2** (`src/investments/assets/templates/`) |
 | Agendamento | APScheduler |
 | Testes | `pytest` + fakes (sem mocks de framework) |
 | Qualidade | `ruff` + `black` |
@@ -116,15 +117,20 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 
 ```
 src/
-  domain/        → models.py (Quote, Opportunity, Holding), ports.py (ISP: Quote, Storage, Notification, Portfolio)
-  application/   → portfolio/ (manage + scan), radar/ (market radar)
-  adapters/      → yfinance, brapi, composite_quote_adapter, email, telegram, sqlite (Storage + Portfolio), scheduler
-  assets/        → templates/ (Jinja2 HTML — opportunities.html, error.html)
-  config.py      → pydantic-settings (sem tickers hardcoded)
-  main.py        → composition root (CLI: portfolio, scan, test-email)
-agents/skill/   → instruções para IAs gerarem nova automação
+  investments/   → bounded context de investimentos
+    domain/      → models.py e ports.py de carteira, cotações e alertas
+    application/ → manage, scan, radar e importação de e-mails
+    adapters/    → inbound (IMAP, scheduler) e outbound (Brapi, yfinance, SQLite, notificadores)
+    assets/      → templates Jinja2 de alertas financeiros
+  memory/        → bounded context de memória semântica
+    domain/      → ISemanticMemoryPort
+    application/ → salvar preferências e buscar contexto
+    adapters/    → FakeSemanticMemoryAdapter provisório
+  shared/        → infraestrutura transversal, incluindo config.py
+  main.py        → composition root e adapter CLI (portfolio, scan, test-email)
+agents/skill/   → instruções para IAs e colaboradores
 ```
-Sem hardcode: carteira via `surge portfolio add` (SQLite + validação Brapi); radar via Brapi `/api/quote/list`.
+Cada contexto preserva seu próprio hexágono: domínio define portas, aplicação depende apenas delas e adapters implementam detalhes externos. O `main.py` é o único ponto que conhece e compõe os contexts. Sem hardcode: carteira via `surge portfolio add` (SQLite + validação Brapi); radar via Brapi `/api/quote/list`.
 
 Nova automação? Leia `agents/skill/new-automation.md`.
 

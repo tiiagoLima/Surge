@@ -37,7 +37,10 @@ Imagem Docker é artefato de deploy. `docker-compose.yml` espelha produção. Ag
 
 ### ADR-0006 — Pasta `agents/skill` como instruções para ferramentas de IA
 
-## 3. Estrutura de Pastas (flatten estético — núcleo em `src/`)
+### ADR-0007 — Bounded contexts com hexágonos independentes
+O código é organizado primeiro por contexto de negócio e, dentro de cada contexto, por domínio, aplicação e adapters. `investments` contém a automação financeira; `memory` contém a fundação de memória semântica; `shared` contém apenas preocupações transversais. O composition root em `src/main.py` é o único ponto que compõe contexts.
+
+## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```
 surge/
@@ -50,32 +53,20 @@ surge/
 │       ├── new-automation.md
 │       └── testing-guidelines.md
 ├── src/
-│   ├── domain/
-│   │   ├── models.py        # Quote, Opportunity, Holding
-│   │   └── ports.py         # QuotePort, StoragePort, NotificationPort, PortfolioPort (ISP)
-│   ├── application/
-│   │   ├── portfolio/
-│   │   │   ├── manage_portfolio_use_case.py  # add/remove/list/get (agnóstico)
-│   │   │   └── scan_portfolio_use_case.py    # monitora holdings
-│   │   └── radar/
-│   │       └── market_radar_use_case.py      # radar Brapi, exclui carteira
-│   ├── adapters/
-│   │   ├── inbound/
-│   │   │   └── scheduler_trigger.py
-│   │   └── outbound/
-│   │       ├── yfinance_adapter.py
-│   │       ├── brapi_adapter.py
-│   │       ├── composite_quote_adapter.py
-│   │       ├── email_notifier.py
-│   │       ├── telegram_notifier.py
-│   │       ├── composite_notifier.py
-│   │       └── sqlite_repository.py
-│   ├── assets/
-│   │   └── templates/
-│   │       ├── opportunities.html  # e-mail dark mode financeiro (Jinja2)
-│   │       └── error.html          # e-mail de erro de sistema (Jinja2)
-│   ├── config.py
-│   └── main.py
+│   ├── investments/                # bounded context de investimentos
+│   │   ├── domain/                 # modelos e portas de investimentos
+│   │   ├── application/            # carteira, scanner, radar e e-mails
+│   │   ├── adapters/
+│   │   │   ├── inbound/            # IMAP e scheduler
+│   │   │   └── outbound/           # Brapi, yfinance, SQLite e notificadores
+│   │   └── assets/templates/       # templates Jinja2 financeiros
+│   ├── memory/                     # bounded context de memória semântica
+│   │   ├── domain/                 # ISemanticMemoryPort
+│   │   ├── application/            # salvar preferências e buscar contexto
+│   │   └── adapters/outbound/      # fake em memória, substituível por vector store
+│   ├── shared/
+│   │   └── config.py               # configuração transversal
+│   └── main.py                     # composition root e CLI
 ├── tests/
 │   ├── unit/
 │   └── integration/
@@ -88,7 +79,7 @@ surge/
 └── README.md
 ```
 
-Pacote importável: `src` (distribuição `surge`). Estrutura flatten: `src/domain` etc., sem `src/surge/` redundante.
+Pacote importável: `src` (distribuição `surge`). Imports seguem `src.<contexto>.<camada>`, por exemplo `src.investments.domain.models` e `src.memory.domain.ports`; não crie novos módulos em camadas técnicas globais.
 
 ## 4. Convenções de Código
 

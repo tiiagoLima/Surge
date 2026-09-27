@@ -14,8 +14,8 @@
 ## Como escrever
 ```python
 # tests/unit/test_scan_portfolio.py
-from src.domain.models import Quote
-from src.domain.ports import QuotePort, NotificationPort, StoragePort
+from src.investments.domain.models import Quote
+from src.investments.domain.ports import QuotePort, NotificationPort, StoragePort
 
 class FakeQuotePort(QuotePort):
     def get_quote(self, ticker): ...
