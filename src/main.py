@@ -16,6 +16,7 @@ from src.adapters.outbound.brapi_adapter import BrapiAdapter
 from src.adapters.outbound.composite_notifier import CompositeNotifier
 from src.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
 from src.adapters.outbound.email_notifier import EmailNotifier
+from src.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
 from src.adapters.outbound.sqlite_repository import SqliteRepository
 from src.adapters.outbound.telegram_notifier import TelegramNotifier
 from src.adapters.outbound.yfinance_adapter import YFinanceAdapter
@@ -23,6 +24,8 @@ from src.application.portfolio.manage_portfolio_use_case import ManagePortfolioU
 from src.application.portfolio.process_investment_emails_use_case import (
     ProcessInvestmentEmailsUseCase,
 )
+from src.application.memory.save_preference_use_case import SavePreferenceUseCase
+from src.application.memory.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
 from src.application.portfolio.scan_portfolio_use_case import ScanPortfolioUseCase
 from src.application.radar.market_radar_use_case import MarketRadarUseCase
 from src.config import get_settings
@@ -65,6 +68,16 @@ def _build_ports():
 
     notification_port = CompositeNotifier(notifiers)
     return settings, repo, quote_port, notification_port, repo
+
+
+def build_save_preference_use_case() -> SavePreferenceUseCase:
+    """Build the semantic-memory preference use case."""
+    return SavePreferenceUseCase(memory_port=FakeSemanticMemoryAdapter())
+
+
+def build_search_semantic_memory_use_case() -> SearchSemanticMemoryUseCase:
+    """Build the semantic-memory search use case."""
+    return SearchSemanticMemoryUseCase(memory_port=FakeSemanticMemoryAdapter())
 
 
 def build_manage_portfolio_use_case() -> ManagePortfolioUseCase:
@@ -244,11 +257,14 @@ def main() -> None:
                 print(f"Ticker não encontrado: {args.ticker}", file=sys.stderr)
                 sys.exit(1)
         elif args.portfolio_cmd == "get":
-            h = uc.get(args.ticker)
-            if h is None:
+            holding = uc.get(args.ticker)
+            if holding is None:
                 print(f"Não encontrado: {args.ticker}", file=sys.stderr)
                 sys.exit(1)
-            print(f"{h.ticker} qty={h.quantity} avg={h.avg_price} {h.currency} added={h.added_at}")
+            print(
+                f"{holding.ticker} qty={holding.quantity} avg={holding.avg_price} "
+                f"{holding.currency} added={holding.added_at}"
+            )
         return
 
     if args.command == "scan":
@@ -260,15 +276,15 @@ def main() -> None:
             do_portfolio = do_radar = True
         if do_portfolio:
             print("Scanning portfolio...")
-            uc = build_scan_portfolio_use_case()
-            opps = uc.execute()
+            scan_use_case = build_scan_portfolio_use_case()
+            opps = scan_use_case.execute()
             print(f"Portfolio: {len(opps)} oportunidades")
             for o in opps:
                 print(f"  - {o.summary()}")
         if do_radar:
             print("Scanning market radar (Brapi)...")
-            uc = build_market_radar_use_case()
-            opps = uc.execute()
+            radar_use_case = build_market_radar_use_case()
+            opps = radar_use_case.execute()
             print(f"Radar: {len(opps)} oportunidades")
             for o in opps:
                 print(f"  - {o.summary()}")

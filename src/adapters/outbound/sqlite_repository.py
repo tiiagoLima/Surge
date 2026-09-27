@@ -23,6 +23,7 @@ class SqliteRepository(PortfolioPort, StoragePort):
 
     def __init__(self, db_path: str | Path = "./surge.db") -> None:
         # Normalize to absolute path for persistence; :memory: keeps in RAM only
+        self._memory_conn: sqlite3.Connection | None
         if isinstance(db_path, str) and db_path == ":memory:":
             self._db_path: str | Path = f"file:mem_{uuid.uuid4().hex}?mode=memory&cache=shared"
             self._is_memory = True
