@@ -29,7 +29,7 @@ class TelegramNotifier(NotificationPort):
         url = f"https://api.telegram.org/bot{self._token}/sendMessage"
         resp = requests.post(
             url,
-            json={"chat_id": self._chat_id, "text": text, "parse_mode": "Markdown"},
+            json={"chat_id": self._chat_id, "text": text, "parse_mode": "HTML"},
             timeout=10,
         )
         resp.raise_for_status()
@@ -37,14 +37,32 @@ class TelegramNotifier(NotificationPort):
     def notify(self, opportunities: list[Opportunity]) -> None:
         if not opportunities:
             return
-        lines = ["*Surge* detectou quedas relevantes:\n"]
+
+        chunk_limit = 4000
+        current_chunk = "*Surge* detectou quedas relevantes:\n\n"
+        chunks = []
+
         for opp in opportunities:
-            # Escape Markdown minimally — keep summary plain
-            lines.append(f"• {opp.summary()}")
-        text = "\n".join(lines)
+            line = f"• {opp.summary()}\n"
+
+            # If the current line exceeds the limit, save the block and start a new one
+            if len(current_chunk) + len(line) > chunk_limit:
+                chunks.append(current_chunk)
+                current_chunk = line
+            else:
+                current_chunk += line
+
+        # Adds the last remaining block to the list
+        if current_chunk:
+            chunks.append(current_chunk)
+
         try:
-            self._send(text)
-            logger.info("Telegram sent (%d opportunities)", len(opportunities))
+            # Sends each block sequentially
+            for text in chunks:
+                self._send(text)
+            logger.info(
+                "Telegram sent (%d opportunities in %d messages)", len(opportunities), len(chunks)
+            )
         except Exception:
             logger.exception("Failed to send Telegram message")
             raise
