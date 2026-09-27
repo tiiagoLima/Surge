@@ -37,7 +37,7 @@ class ImapInboxAdapter(InboxPort):
         with imaplib.IMAP4_SSL(self._host, self._port) as client:
             client.login(self._username, self._password)
             client.select(self._mailbox)
-            status, data = client.uid("search", None, "UNSEEN")
+            status, data = client.uid("search", "", "UNSEEN")
             if status != "OK" or not data or not data[0]:
                 return []
             messages: list[IncomingEmail] = []
