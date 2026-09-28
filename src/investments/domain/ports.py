@@ -8,6 +8,18 @@ from src.investments.domain.email_models import IncomingEmail
 from src.investments.domain.models import Holding, Opportunity, Quote
 
 
+class MarketAnalystPort(ABC):
+    """Analyzes market opportunities and returns an insight string."""
+
+    @abstractmethod
+    def analyze(self, opportunity: Opportunity) -> str:
+        """Return an insight string about the given opportunity.
+
+        The implementation may call external APIs (Gemini, yfinance, etc.)
+        but must return strictly a string — no domain objects leak.
+        """
+
+
 class QuotePort(ABC):
     """Fetches market quotes for tickers."""
 
