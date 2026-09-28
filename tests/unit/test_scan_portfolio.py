@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 from src.investments.application.scan_portfolio_use_case import ScanPortfolioUseCase
 from src.investments.domain.models import Holding, Opportunity, Quote
-from src.investments.domain.ports import NotificationPort, PortfolioPort, QuotePort, StoragePort
+from src.investments.domain.ports import (
+    MarketAnalystPort,
+    NotificationPort,
+    PortfolioPort,
+    QuotePort,
+    StoragePort,
+)
 
 
 class FakePortfolio(PortfolioPort):
@@ -44,6 +50,11 @@ class FakeNotifier(NotificationPort):
 
     def notify_error(self, message: str) -> None:
         pass
+
+
+class FakeAnalyst(MarketAnalystPort):
+    def analyze(self, opportunity: Opportunity) -> str:
+        return f"Insight para {opportunity.ticker}"
 
 
 class FakeStorage(StoragePort):
@@ -86,12 +97,40 @@ def test_scan_portfolio_detects_drop():
     )
     notifier = FakeNotifier()
     storage = FakeStorage()
-    uc = ScanPortfolioUseCase(portfolio, quotes, notifier, storage, drop_threshold_pct=5.0)
+    uc = ScanPortfolioUseCase(
+        portfolio,
+        quotes,
+        notifier,
+        storage,
+        drop_threshold_pct=5.0,
+        analyst=FakeAnalyst(),
+    )
     opps = uc.execute()
     assert len(opps) == 1
     assert opps[0].ticker == "PETR4.SA"
+    assert opps[0].insight == "Insight para PETR4.SA"
     assert len(notifier.sent) == 1
     assert len(storage.opps) == 1
+
+
+def test_scan_portfolio_limits_opportunities_per_execution():
+    portfolio = FakePortfolio([_holding(f"TICKER{i}.SA") for i in range(3)])
+    quotes = FakeQuote({f"TICKER{i}.SA": _quote(f"TICKER{i}.SA", 90, 100) for i in range(3)})
+    notifier = FakeNotifier()
+    storage = FakeStorage()
+    uc = ScanPortfolioUseCase(
+        portfolio,
+        quotes,
+        notifier,
+        storage,
+        analyst=FakeAnalyst(),
+        max_opportunities=2,
+    )
+
+    opps = uc.execute()
+
+    assert len(opps) == 2
+    assert len(notifier.sent[0]) == 2
 
 
 def test_scan_portfolio_empty_holdings():

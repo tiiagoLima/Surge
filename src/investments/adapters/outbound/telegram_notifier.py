@@ -44,6 +44,8 @@ class TelegramNotifier(NotificationPort):
 
         for opp in opportunities:
             line = f"• {opp.summary()}\n"
+            if opp.insight:
+                line += f"🧠 <b>Insight da IA:</b> {opp.insight}\n"
 
             # If the current line exceeds the limit, save the block and start a new one
             if len(current_chunk) + len(line) > chunk_limit:

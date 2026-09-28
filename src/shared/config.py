@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     timezone: str = Field(default="America/Sao_Paulo", alias="SURGE_TIMEZONE")
     log_level: str = Field(default="INFO", alias="SURGE_LOG_LEVEL")
 
+    # Gemini
+    gemini_api_key: str = Field(default="", alias="SURGE_GEMINI_API_KEY")
+    max_opportunities_per_scan: int = Field(default=10, alias="SURGE_MAX_OPPORTUNITIES_PER_SCAN")
+
     @property
     def has_notification_channel(self) -> bool:
         return self.email_enabled or self.telegram_enabled

@@ -1,7 +1,7 @@
-"""Composition root — Surge.
+﻿"""Composition root ÔÇö Surge.
 
 Wires adapters into use cases. No business logic here.
-Inbound adapter (CLI) is agnostic — same use cases can be called by Telegram later.
+Inbound adapter (CLI) is agnostic ÔÇö same use cases can be called by Telegram later.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ from src.investments.adapters.outbound.brapi_adapter import BrapiAdapter
 from src.investments.adapters.outbound.composite_notifier import CompositeNotifier
 from src.investments.adapters.outbound.composite_quote_adapter import CompositeQuoteAdapter
 from src.investments.adapters.outbound.email_notifier import EmailNotifier
+from src.investments.adapters.outbound.fake_analyst_adapter import FakeAnalystAdapter
+from src.investments.adapters.outbound.gemini_analyst_adapter import GeminiAnalystAdapter
 from src.investments.adapters.outbound.sqlite_repository import SqliteRepository
 from src.investments.adapters.outbound.telegram_notifier import TelegramNotifier
 from src.investments.adapters.outbound.yfinance_adapter import YFinanceAdapter
@@ -70,6 +72,14 @@ def _build_ports():
     return settings, repo, quote_port, notification_port, repo
 
 
+def build_market_analyst_port():
+    """Build Gemini when configured, otherwise use the safe fake adapter."""
+    settings = get_settings()
+    if settings.gemini_api_key:
+        return GeminiAnalystAdapter(api_key=settings.gemini_api_key)
+    return FakeAnalystAdapter()
+
+
 def build_save_preference_use_case() -> SavePreferenceUseCase:
     """Build the semantic-memory preference use case."""
     return SavePreferenceUseCase(memory_port=FakeSemanticMemoryAdapter())
@@ -93,6 +103,8 @@ def build_scan_portfolio_use_case() -> ScanPortfolioUseCase:
         notification_port=notification_port,
         storage_port=storage_port,
         drop_threshold_pct=settings.drop_threshold,
+        analyst=build_market_analyst_port(),
+        max_opportunities=settings.max_opportunities_per_scan,
     )
 
 
@@ -104,11 +116,13 @@ def build_market_radar_use_case() -> MarketRadarUseCase:
         notification_port=notification_port,
         storage_port=storage_port,
         drop_threshold_pct=settings.drop_threshold,
+        analyst=build_market_analyst_port(),
+        max_opportunities=settings.max_opportunities_per_scan,
     )
 
 
 def run_scheduler() -> None:
-    """Run with APScheduler (blocking) — imports emails and scans daily."""
+    """Run with APScheduler (blocking) ÔÇö imports emails and scans daily."""
     settings = get_settings()
     scan_portfolio = build_scan_portfolio_use_case()
     radar = build_market_radar_use_case()
@@ -152,7 +166,7 @@ def run_scheduler() -> None:
         except Exception:
             logger.exception("Scheduled radar scan failed")
 
-    logger.info("Surge starting — running initial scheduled scan")
+    logger.info("Surge starting ÔÇö running initial scheduled scan")
     job()
 
     trigger = SchedulerTrigger(timezone=settings.timezone)
@@ -163,7 +177,7 @@ def run_scheduler() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="surge", description="Surge — Personal Automation Hub")
+    parser = argparse.ArgumentParser(prog="surge", description="Surge ÔÇö Personal Automation Hub")
     parser.add_argument(
         "--log-level", default=None, help="Override log level (DEBUG, INFO, WARNING)"
     )
@@ -172,7 +186,7 @@ def main() -> None:
 
     # portfolio subcommand
     p_parser = subparsers.add_parser(
-        "portfolio", help="Manage holdings (agnostic — CLI is just inbound adapter)"
+        "portfolio", help="Manage holdings (agnostic ÔÇö CLI is just inbound adapter)"
     )
     p_sub = p_parser.add_subparsers(dest="portfolio_cmd", required=True)
     p_add = p_sub.add_parser("add", help="Add holding (validates via Brapi)")
@@ -221,7 +235,7 @@ def main() -> None:
         stream=sys.stdout,
     )
 
-    # No subcommand -> scheduler (portfolio + radar diários)
+    # No subcommand -> scheduler (portfolio + radar di├írios)
     if args.command is None:
         print("Surge -- Personal Automation Hub")
         holdings_preview = build_manage_portfolio_use_case().list()
@@ -259,12 +273,12 @@ def main() -> None:
             if removed:
                 print(f"Removido {args.ticker.upper()}")
             else:
-                print(f"Ticker não encontrado: {args.ticker}", file=sys.stderr)
+                print(f"Ticker n├úo encontrado: {args.ticker}", file=sys.stderr)
                 sys.exit(1)
         elif args.portfolio_cmd == "get":
             holding = uc.get(args.ticker)
             if holding is None:
-                print(f"Não encontrado: {args.ticker}", file=sys.stderr)
+                print(f"N├úo encontrado: {args.ticker}", file=sys.stderr)
                 sys.exit(1)
             print(
                 f"{holding.ticker} qty={holding.quantity} avg={holding.avg_price} "
@@ -286,6 +300,8 @@ def main() -> None:
             print(f"Portfolio: {len(opps)} oportunidades")
             for o in opps:
                 print(f"  - {o.summary()}")
+                if o.insight:
+                    print(f"    Insight da IA: {o.insight}")
         if do_radar:
             print("Scanning market radar (Brapi)...")
             radar_use_case = build_market_radar_use_case()
@@ -293,6 +309,8 @@ def main() -> None:
             print(f"Radar: {len(opps)} oportunidades")
             for o in opps:
                 print(f"  - {o.summary()}")
+                if o.insight:
+                    print(f"    Insight da IA: {o.insight}")
         return
 
     if args.command == "test-email":
@@ -345,7 +363,6 @@ def _cmd_test_email(args: argparse.Namespace) -> None:
     settings = get_settings()
 
     from src.investments.adapters.outbound.composite_notifier import CompositeNotifier
-    from src.investments.adapters.outbound.email_notifier import EmailNotifier
 
     _, _, _, notification_port, _ = _build_ports()
 
@@ -376,7 +393,7 @@ def _cmd_test_email(args: argparse.Namespace) -> None:
     if args.preview:
         html = email_notifier.render_opportunities_html(opps)
         if not html:
-            print("Erro: template HTML não encontrado em src/investments/assets/templates/")
+            print("Erro: template HTML n├úo encontrado em src/investments/assets/templates/")
             return
         with tempfile.NamedTemporaryFile(
             suffix="_surge_email_preview.html",
@@ -392,7 +409,7 @@ def _cmd_test_email(args: argparse.Namespace) -> None:
     if args.send:
         if not settings.email_enabled:
             print(
-                "Aviso: SURGE_EMAIL_ENABLED=false — ativando modo de envio forçado para teste.",
+                "Aviso: SURGE_EMAIL_ENABLED=false ÔÇö ativando modo de envio for├ºado para teste.",
                 flush=True,
             )
         test_notifier = EmailNotifier(

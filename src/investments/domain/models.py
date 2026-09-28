@@ -78,6 +78,7 @@ class Opportunity:
         threshold_pct: Threshold that was breached.
         detected_at: When detection happened (UTC).
         holding: Owned position related to the opportunity, when applicable.
+        insight: Optional analytical insight about the opportunity.
     """
 
     quote: Quote
@@ -85,6 +86,7 @@ class Opportunity:
     threshold_pct: float
     detected_at: datetime
     holding: Holding | None = None
+    insight: str | None = None
 
     @property
     def ticker(self) -> str:

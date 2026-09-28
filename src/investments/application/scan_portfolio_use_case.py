@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from src.investments.domain.models import Opportunity
-from src.investments.domain.ports import NotificationPort, PortfolioPort, QuotePort, StoragePort
+from src.investments.domain.ports import (
+    MarketAnalystPort,
+    NotificationPort,
+    PortfolioPort,
+    QuotePort,
+    StoragePort,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +36,20 @@ class ScanPortfolioUseCase:
         notification_port: NotificationPort,
         storage_port: StoragePort,
         drop_threshold_pct: float = 5.0,
+        analyst: MarketAnalystPort | None = None,
+        max_opportunities: int | None = None,
     ) -> None:
         if drop_threshold_pct <= 0:
             raise ValueError("drop_threshold_pct must be > 0")
+        if max_opportunities is not None and max_opportunities <= 0:
+            raise ValueError("max_opportunities must be > 0")
         self._portfolio = portfolio_port
         self._quotes = quote_port
         self._notifier = notification_port
         self._storage = storage_port
         self._threshold = drop_threshold_pct
+        self._analyst = analyst
+        self._max_opportunities = max_opportunities
 
     @property
     def threshold(self) -> float:
@@ -68,6 +81,11 @@ class ScanPortfolioUseCase:
                 logger.exception("Failed to save quote for %s", ticker)
 
             if quote.is_significant_drop(self._threshold):
+                if (
+                    self._max_opportunities is not None
+                    and len(opportunities) >= self._max_opportunities
+                ):
+                    continue
                 drop = quote.drop_pct()
                 assert drop is not None
                 holding = holdings_by_ticker.get(ticker.upper())
@@ -78,6 +96,8 @@ class ScanPortfolioUseCase:
                     detected_at=now,
                     holding=holding,
                 )
+                if self._analyst is not None:
+                    opp = replace(opp, insight=self._analyst.analyze(opp))
                 opportunities.append(opp)
                 try:
                     self._storage.save_opportunity(opp)
