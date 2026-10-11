@@ -68,16 +68,34 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 
 | Var | Default | Descrição |
 |-----|---------|-----------|
-| `SURGE_DROP_THRESHOLD` | `5.0` | Queda % vs fechamento anterior |
-| `SURGE_DB_PATH` | `./surge.db` | SQLite |
-| `SURGE_TELEGRAM_ENABLED` | `false` | Ativa Telegram |
-| `SURGE_EMAIL_ENABLED` | `false` | Ativa e-mail SMTP |
-| `SURGE_SMTP_HOST` | — | Servidor SMTP (ex: `smtp.gmail.com`) |
+| `SURGE_DROP_THRESHOLD` | `5.0` | Queda % vs fechamento anterior para alertar |
+| `SURGE_CRON_HOUR` | `18` | Hora de execução diária do scanner |
+| `SURGE_CRON_MINUTE` | `0` | Minuto de execução diária do scanner |
+| `SURGE_DB_PATH` | `./surge.db` | Caminho do banco SQLite |
+| `SURGE_TELEGRAM_ENABLED` | `false` | Ativa notificações via Telegram |
+| `SURGE_TELEGRAM_BOT_TOKEN` | — | Token do Bot do Telegram |
+| `SURGE_TELEGRAM_CHAT_ID` | — | Chat ID do destinatário no Telegram |
+| `SURGE_EMAIL_ENABLED` | `false` | Ativa envio de e-mail via SMTP |
+| `SURGE_SMTP_HOST` | `smtp.gmail.com` | Servidor SMTP |
 | `SURGE_SMTP_PORT` | `587` | Porta SMTP (TLS) |
 | `SURGE_SMTP_USER` | — | Usuário SMTP |
-| `SURGE_SMTP_PASSWORD` | — | Senha / App Password |
-| `SURGE_EMAIL_FROM` | — | Remetente |
-| `SURGE_EMAIL_TO` | — | Destinatário |
+| `SURGE_SMTP_PASSWORD` | — | Senha / App Password do Gmail |
+| `SURGE_EMAIL_FROM` | — | E-mail do remetente |
+| `SURGE_EMAIL_TO` | — | E-mail do destinatário |
+| `SURGE_IMAP_ENABLED` | `false` | Ativa leitura de comandos por e-mail |
+| `SURGE_IMAP_HOST` | `imap.gmail.com` | Servidor IMAP |
+| `SURGE_IMAP_PORT` | `993` | Porta IMAP (SSL) |
+| `SURGE_IMAP_USER` | — | Usuário IMAP |
+| `SURGE_IMAP_PASSWORD` | — | Senha de app para leitura IMAP |
+| `SURGE_IMAP_MAILBOX` | `INBOX` | Caixa postal para monitorar |
+| `SURGE_INVESTMENT_EMAIL_SUBJECT` | `SURGE: INVESTIMENTO` | Prefixo de assunto para registrar compras |
+| `SURGE_EMAIL_POLL_MINUTES` | `5` | Intervalo em minutos para checagem IMAP |
+| `SURGE_BRAPI_TOKEN` | — | Token da Brapi (opcional) |
+| `SURGE_BRAPI_BASE_URL` | `https://brapi.dev` | URL base da API Brapi |
+| `SURGE_GEMINI_API_KEY` | — | Chave de API do Google Gemini para insights |
+| `SURGE_MAX_OPPORTUNITIES_PER_SCAN` | `10` | Limite máximo de oportunidades por scan |
+| `SURGE_TIMEZONE` | `America/Sao_Paulo` | Fuso horário da aplicação |
+| `SURGE_LOG_LEVEL` | `INFO` | Nível de log (DEBUG, INFO, WARNING) |
 
 ## Stack
 
@@ -90,26 +108,31 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 | Cotações | `yfinance` + Brapi (fallback composto) |
 | Notificação | SMTP (`smtplib`) + Telegram Bot API |
 | Templates HTML | **Jinja2** (`src/investments/assets/templates/`) |
+| IA / LLM | Google Gemini (`google-genai`) via `MarketAnalystPort` |
 | Agendamento | APScheduler |
 | Testes | `pytest` + fakes (sem mocks de framework) |
-| Qualidade | `ruff` + `black` |
+| Qualidade | `ruff` + `black` + `mypy` |
 | Deploy | Docker + Docker Compose |
 
 ## Arquitetura
 
 ```
 src/
+  finances/      → bounded context de finanças pessoais (despesas, orçamento)
+    domain/      → models.py (Transaction, CategoryBudget) e ports.py
+    application/ → register_expense_use_case.py
+    adapters/    → outbound (SQLite FinanceSqliteRepository)
   investments/   → bounded context de investimentos
     domain/      → models.py e ports.py de carteira, cotações e alertas
     application/ → manage, scan, radar e importação de e-mails
-    adapters/    → inbound (IMAP, scheduler) e outbound (Brapi, yfinance, SQLite, notificadores)
+    adapters/    → inbound (IMAP, scheduler) e outbound (Brapi, yfinance, SQLite, Gemini, notificadores)
     assets/      → templates Jinja2 de alertas financeiros
   memory/        → bounded context de memória semântica
     domain/      → ISemanticMemoryPort
     application/ → salvar preferências e buscar contexto
-    adapters/    → FakeSemanticMemoryAdapter provisório
+    adapters/    → FakeSemanticMemoryAdapter provisório (evoluível para vector store)
   shared/        → infraestrutura transversal, incluindo config.py
-  main.py        → composition root e adapter CLI (portfolio, scan, test-email)
+  main.py        → composition root e adapter CLI (portfolio, scan, test-email, finances)
 agents/skill/   → instruções para IAs e colaboradores
 ```
 Cada contexto preserva seu próprio hexágono: domínio define portas, aplicação depende apenas delas e adapters implementam detalhes externos. O `main.py` é o único ponto que conhece e compõe os contexts. Sem hardcode: carteira via `surge portfolio add` (SQLite + validação Brapi); radar via Brapi `/api/quote/list`.
@@ -123,6 +146,7 @@ pytest tests/unit -v
 pytest tests/integration -v  # requer rede
 ruff check .
 black --check .
+mypy src
 ```
 
 ## CI
@@ -131,9 +155,16 @@ black --check .
 
 ## Roadmap
 
-- [ ] Contas a pagar
-- [ ] Faculdade (alertas de tarefas/provas)
-- [ ] Agentes de IA (Surge personificado)
+- [x] MVP `investment_scanner` (monitoramento B3/global, quedas >= 5%, alertas e-mail/Telegram)
+- [x] Bounded context de Finanças Pessoais (`finances`) com registro de despesas e controle de tetos por categoria
+- [x] Insights de mercado com Google Gemini via porta analítica desacoplada
+- [ ] Memória persistente (migração de memória em RAM para SQLite com embeddings e busca vetorial)
+- [ ] ChatOps bidirecional no Telegram (bot interativo com botões para despesas e alocação salarial)
+- [ ] Parser de holerite por e-mail (extração de valor líquido de salário)
+- [ ] Runtime de Agente Pessoal (ReAct loop com *tool calling* sobre as ferramentas de domínio)
+- [ ] Automações acadêmicas (IFMA: alertas de prazos e provas)
+- [ ] Contas a pagar automatizadas
+
 
 ### Alertas da carteira
 

@@ -4,7 +4,7 @@
 
 ## 1. Escolher o bounded context e modelar o domínio
 
-Antes de criar arquivos, defina o contexto delimitado. Reutilize `src/investments/` para carteira, cotações e alertas; use `src/memory/` para memória semântica. Para um conceito novo e independente, crie `src/<contexto>/` com seu próprio hexágono.
+Antes de criar arquivos, defina o contexto delimitado. Reutilize `src/investments/` para carteira, cotações e alertas; use `src/finances/` para fluxo de caixa, despesas e orçamentos; use `src/memory/` para memória semântica e preferências. Para um conceito novo e independente, crie `src/<contexto>/` com seu próprio hexágono.
 
 Crie/edite `src/<contexto>/domain/models.py`:
 - Entidades como `@dataclass(frozen=True)`
@@ -48,7 +48,8 @@ class MyUseCase:
 - Type hints obrigatórios, docstring Google style
 - Padrões de referência: `ScanPortfolioUseCase` (monitora o que é meu),
   `MarketRadarUseCase` (descobre o mercado via `list_market_quotes()` e
-  exclui o que já tenho).
+  exclui o que já tenho), `RegisterExpenseUseCase` (registra transações e
+  avalia teto de orçamento por categoria).
 
 ## 4. Implementar adapters
 
