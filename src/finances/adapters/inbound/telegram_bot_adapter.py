@@ -17,6 +17,7 @@ from src.finances.application.manage_budget_use_case import (
 )
 from src.finances.application.register_expense_use_case import RegisterExpenseUseCase
 from src.finances.domain.models import ExpenseCategory
+from src.investments.application.manage_portfolio_use_case import ManagePortfolioUseCase
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class TelegramFinanceBotAdapter:
         register_expense_use_case: RegisterExpenseUseCase,
         set_budget_use_case: SetBudgetUseCase,
         get_summary_use_case: GetMonthlySummaryUseCase,
+        portfolio_use_case: ManagePortfolioUseCase | None = None,
         session: requests.Session | None = None,
     ) -> None:
         """Initialize adapter with credentials, use cases, and HTTP session."""
@@ -49,6 +51,7 @@ class TelegramFinanceBotAdapter:
         self._register_expense_use_case = register_expense_use_case
         self._set_budget_use_case = set_budget_use_case
         self._get_summary_use_case = get_summary_use_case
+        self._portfolio_use_case = portfolio_use_case
         self._session = session or requests.Session()
         self._base_url = f"https://api.telegram.org/bot{self._token}"
 
@@ -126,6 +129,15 @@ class TelegramFinanceBotAdapter:
             self._send_category_selection(chat_id, action="bud")
         elif data == "menu:summary":
             self._send_monthly_summary(chat_id)
+        elif data == "menu:portfolio":
+            self._send_portfolio_list(chat_id)
+        elif data == "menu:portfolio_add":
+            self._prompt_portfolio_add(chat_id)
+        elif data == "menu:portfolio_rm":
+            self._send_portfolio_remove_selection(chat_id)
+        elif data.startswith("port_rm:"):
+            ticker = data.split(":", 1)[1]
+            self._process_portfolio_remove(chat_id, ticker)
         elif data.startswith("exp_cat:"):
             cat_name = data.split(":", 1)[1]
             category = ExpenseCategory[cat_name]
@@ -191,12 +203,35 @@ class TelegramFinanceBotAdapter:
             self._send_category_selection(chat_id, action="bud")
             return
 
+        if command in ("/carteira", "/portfolio"):
+            self._send_portfolio_list(chat_id)
+            return
+
+        if command in ("/ativo", "/adicionar"):
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1:
+                self._process_portfolio_add_input(chat_id, parts[1])
+            else:
+                self._prompt_portfolio_add(chat_id)
+            return
+
+        if command in ("/remover", "/del"):
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1:
+                ticker = parts[1].strip()
+                self._process_portfolio_remove(chat_id, ticker)
+            else:
+                self._send_portfolio_remove_selection(chat_id)
+            return
+
         state = self._user_state.get(chat_id)
 
         if state == "AWAITING_EXPENSE_INPUT":
             self._process_expense_input(chat_id, text)
         elif state == "AWAITING_BUDGET_INPUT":
             self._process_budget_input(chat_id, text)
+        elif state == "AWAITING_PORTFOLIO_ADD":
+            self._process_portfolio_add_input(chat_id, text)
         else:
             self.send_message(
                 chat_id,
@@ -351,7 +386,7 @@ class TelegramFinanceBotAdapter:
 
     def _send_main_menu(self, chat_id: str) -> None:
         """Send the top-level menu with interactive buttons."""
-        text = "🤖 <b>Surge Finanças</b>\n\nO que você deseja fazer agora?"
+        text = "🤖 <b>Surge Assistant</b>\n\nO que você deseja fazer agora?"
         self.send_message(chat_id, text, reply_markup=self._main_menu_keyboard())
 
     def _send_category_selection(self, chat_id: str, action: str) -> None:
@@ -361,14 +396,225 @@ class TelegramFinanceBotAdapter:
         keyboard = self._category_keyboard(prefix=f"{action}_cat")
         self.send_message(chat_id, text, reply_markup=keyboard)
 
+    def _send_portfolio_list(self, chat_id: str) -> None:
+        """Fetch and send current portfolio holdings."""
+        if self._portfolio_use_case is None:
+            self.send_message(chat_id, "Recurso de carteira não configurado.")
+            return
+
+        holdings = self._portfolio_use_case.list()
+        if not holdings:
+            text = (
+                "💼 <b>Sua carteira está vazia.</b>\n\n"
+                "Clique em <b>➕ Adicionar Ativo</b> para cadastrar seu primeiro ticker."
+            )
+            self.send_message(
+                chat_id,
+                text,
+                reply_markup={
+                    "inline_keyboard": [
+                        [{"text": "➕ Adicionar Ativo", "callback_data": "menu:portfolio_add"}],
+                        [{"text": "🔙 Voltar ao Menu", "callback_data": "menu:main"}],
+                    ]
+                },
+            )
+            return
+
+        lines = ["💼 <b>Sua Carteira de Investimentos</b>\n"]
+        total_invested = 0.0
+
+        for h in holdings:
+            details = [f"{h.quantity:g} cotas"]
+            if h.avg_price is not None:
+                cost = h.quantity * h.avg_price
+                total_invested += cost
+                details.append(f"PM: {h.currency} {h.avg_price:.2f}")
+                details.append(f"Total: {h.currency} {cost:,.2f}")
+            info = " | ".join(details)
+            lines.append(f"• <b><code>{h.ticker}</code></b>: {info}")
+
+        lines.append(f"\n📊 <b>Total de Ativos:</b> {len(holdings)}")
+        if total_invested > 0:
+            lines.append(f"💰 <b>Total Investido:</b> R$ {total_invested:,.2f}")
+
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "➕ Adicionar Ativo", "callback_data": "menu:portfolio_add"},
+                    {"text": "➖ Remover Ativo", "callback_data": "menu:portfolio_rm"},
+                ],
+                [{"text": "🔙 Voltar ao Menu", "callback_data": "menu:main"}],
+            ]
+        }
+        self.send_message(chat_id, "\n".join(lines), reply_markup=keyboard)
+
+    def _prompt_portfolio_add(self, chat_id: str) -> None:
+        """Prompt user for ticker, quantity and average price."""
+        self._user_state[chat_id] = "AWAITING_PORTFOLIO_ADD"
+        text = (
+            "📈 <b>Adicionar Ativo à Carteira</b>\n\n"
+            "Envie os dados no formato:\n"
+            "<code>TICKER QUANTIDADE PREÇO_MÉDIO</code>\n\n"
+            "<i>Exemplos:</i>\n"
+            "• <code>PETR4 100 34.50</code>\n"
+            "• <code>VALE3 50</code> (sem preço médio)\n"
+            "• <code>AAPL 10 220 USD</code> (ativo global)\n\n"
+            "<i>Envie /cancelar para voltar.</i>"
+        )
+        self.send_message(chat_id, text)
+
+    def _process_portfolio_add_input(self, chat_id: str, text: str) -> None:
+        """Parse input and invoke ManagePortfolioUseCase to add holding."""
+        if self._portfolio_use_case is None:
+            self.send_message(chat_id, "Recurso de carteira não configurado.")
+            return
+
+        parts = text.split()
+        if len(parts) < 2:
+            self.send_message(
+                chat_id,
+                "⚠️ Formato inválido. Informe pelo menos o ticker e a quantidade.\n"
+                "Ex: <code>PETR4 100</code> ou <code>PETR4 100 34.50</code>",
+            )
+            return
+
+        ticker = parts[0].strip().upper()
+        try:
+            quantity = float(parts[1].replace(",", "."))
+            if quantity <= 0:
+                raise ValueError
+        except ValueError:
+            self.send_message(
+                chat_id,
+                "⚠️ Quantidade inválida. Deve ser um número maior que zero.",
+            )
+            return
+
+        avg_price: float | None = None
+        if len(parts) >= 3:
+            try:
+                avg_price = float(parts[2].replace(",", "."))
+                if avg_price <= 0:
+                    raise ValueError
+            except ValueError:
+                self.send_message(
+                    chat_id,
+                    "⚠️ Preço médio inválido. Deve ser um número maior que zero.",
+                )
+                return
+
+        currency = "BRL"
+        if len(parts) >= 4:
+            currency = parts[3].strip().upper()
+
+        try:
+            holding = self._portfolio_use_case.add(
+                ticker=ticker,
+                quantity=quantity,
+                avg_price=avg_price,
+                currency=currency,
+            )
+        except ValueError as e:
+            self.send_message(
+                chat_id,
+                f"❌ <b>Erro ao adicionar ativo:</b> {e}\n\n"
+                "Verifique se o código do ticker é válido na B3 ou mercado global.",
+            )
+            return
+        except Exception as e:
+            logger.exception("Failed to add holding via bot")
+            self.send_message(chat_id, f"⚠️ Erro inesperado: {e}")
+            return
+
+        self._user_state.pop(chat_id, None)
+
+        cost_lines = ""
+        if holding.avg_price is not None:
+            total_cost = holding.quantity * holding.avg_price
+            cost_lines = (
+                f"\n💰 <b>Preço Médio:</b> {holding.currency} {holding.avg_price:.2f}"
+                f"\n💵 <b>Posição Total:</b> {holding.currency} {total_cost:,.2f}"
+            )
+
+        msg = (
+            f"✅ <b>Ativo adicionado com sucesso!</b>\n\n"
+            f"🏷️ <b>Ticker:</b> <code>{holding.ticker}</code>\n"
+            f"📦 <b>Quantidade:</b> {holding.quantity:g}"
+            f"{cost_lines}\n"
+            f"🌐 <b>Moeda:</b> {holding.currency}"
+        )
+        self.send_message(chat_id, msg, reply_markup=self._main_menu_keyboard())
+
+    def _send_portfolio_remove_selection(self, chat_id: str) -> None:
+        """Send keyboard with holdings to select for removal."""
+        if self._portfolio_use_case is None:
+            self.send_message(chat_id, "Recurso de carteira não configurado.")
+            return
+
+        holdings = self._portfolio_use_case.list()
+        if not holdings:
+            self.send_message(
+                chat_id,
+                "💼 <b>Sua carteira está vazia.</b> Não há ativos para remover.",
+                reply_markup=self._main_menu_keyboard(),
+            )
+            return
+
+        buttons: list[list[dict[str, str]]] = []
+        row: list[dict[str, str]] = []
+        for h in holdings:
+            btn = {"text": f"🗑️ {h.ticker}", "callback_data": f"port_rm:{h.ticker}"}
+            row.append(btn)
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+        buttons.append([{"text": "🔙 Voltar ao Menu", "callback_data": "menu:main"}])
+
+        self.send_message(
+            chat_id,
+            "Selecione o ativo que deseja <b>remover</b> da carteira:",
+            reply_markup={"inline_keyboard": buttons},
+        )
+
+    def _process_portfolio_remove(self, chat_id: str, ticker: str) -> None:
+        """Remove holding and confirm to user."""
+        if self._portfolio_use_case is None:
+            self.send_message(chat_id, "Recurso de carteira não configurado.")
+            return
+
+        removed = self._portfolio_use_case.remove(ticker)
+        if removed:
+            self.send_message(
+                chat_id,
+                f"🗑️ Ativo <code>{ticker}</code> removido da carteira com sucesso.",
+                reply_markup=self._main_menu_keyboard(),
+            )
+        else:
+            self.send_message(
+                chat_id,
+                f"⚠️ Ativo <code>{ticker}</code> não encontrado na carteira.",
+                reply_markup=self._main_menu_keyboard(),
+            )
+
     @staticmethod
     def _main_menu_keyboard() -> dict[str, Any]:
         """Construct inline keyboard for main navigation."""
         return {
             "inline_keyboard": [
-                [{"text": "➕ Registrar Gasto", "callback_data": "menu:expense"}],
-                [{"text": "📊 Resumo do Mês", "callback_data": "menu:summary"}],
-                [{"text": "🎯 Definir Teto", "callback_data": "menu:budget"}],
+                [
+                    {"text": "➕ Registrar Gasto", "callback_data": "menu:expense"},
+                    {"text": "📊 Resumo Gastos", "callback_data": "menu:summary"},
+                ],
+                [
+                    {"text": "🎯 Definir Teto", "callback_data": "menu:budget"},
+                    {"text": "💼 Minha Carteira", "callback_data": "menu:portfolio"},
+                ],
+                [
+                    {"text": "➕ Adicionar Ativo", "callback_data": "menu:portfolio_add"},
+                    {"text": "➖ Remover Ativo", "callback_data": "menu:portfolio_rm"},
+                ],
             ]
         }
 

@@ -107,12 +107,14 @@ def build_telegram_finance_bot_adapter() -> TelegramFinanceBotAdapter:
     register_uc = RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
     set_budget_uc = SetBudgetUseCase(budget_port=repository)
     summary_uc = GetMonthlySummaryUseCase(transaction_port=repository, budget_port=repository)
+    portfolio_uc = build_manage_portfolio_use_case()
     return TelegramFinanceBotAdapter(
         bot_token=settings.telegram_bot_token,
         allowed_chat_id=settings.telegram_chat_id,
         register_expense_use_case=register_uc,
         set_budget_use_case=set_budget_uc,
         get_summary_use_case=summary_uc,
+        portfolio_use_case=portfolio_uc,
     )
 
 

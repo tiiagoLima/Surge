@@ -46,7 +46,7 @@ python -m src.main bot
 surge bot
 ```
 
-## Bot Interativo no Telegram (Finanças)
+## Bot Interativo no Telegram (Finanças e Carteira)
 
 ```powershell
 # Executa o bot com menus interativos (long-polling):
@@ -55,9 +55,16 @@ surge bot
 
 - Envie `/start` ou `/menu` para abrir o menu com botões inline:
   - `[➕ Registrar Gasto]` ➔ Selecione a categoria (`Alimentação`, `Lazer`, etc.) e envie o valor com descrição.
-  - `[📊 Resumo do Mês]` ➔ Veja o panorama financeiro com gastos, tetos, consumo % e alertas.
+  - `[📊 Resumo Gastos]` ➔ Veja o panorama financeiro com gastos, tetos, consumo % e alertas.
   - `[🎯 Definir Teto]` ➔ Defina ou ajuste o limite mensal da categoria.
-- Envie `/cancelar` a qualquer momento para resetar a operação em andamento.
+  - `[💼 Minha Carteira]` ➔ Visualize sua carteira declarada com tickers, cotas, PM e valor total.
+  - `[➕ Adicionar Ativo]` ➔ Declare um ativo pelo Telegram (ex: `PETR4 100 34.50` com validação de cotação).
+  - `[➖ Remover Ativo]` ➔ Remova posições com botões clicáveis dinâmicos.
+- Comandos rápidos de texto:
+  - `/carteira` ➔ Exibe a carteira atual.
+  - `/ativo PETR4 100 30` ➔ Adiciona ativo diretamente.
+  - `/remover PETR4` ➔ Remove ativo diretamente.
+  - `/cancelar` ➔ Cancela a operação em andamento.
 - Restrição de segurança: apenas o `SURGE_TELEGRAM_CHAT_ID` autorizado consegue interagir.
 
 ## Templates e Notificação por E-mail
