@@ -10,6 +10,8 @@ import argparse
 import logging
 import sys
 
+from src.finances.adapters.outbound.sqlite_repository import FinanceSqliteRepository
+from src.finances.application.register_expense_use_case import RegisterExpenseUseCase
 from src.investments.adapters.inbound.imap_inbox_adapter import ImapInboxAdapter
 from src.investments.adapters.inbound.scheduler_trigger import SchedulerTrigger
 from src.investments.adapters.outbound.brapi_adapter import BrapiAdapter
@@ -70,6 +72,13 @@ def _build_ports():
 
     notification_port = CompositeNotifier(notifiers)
     return settings, repo, quote_port, notification_port, repo
+
+
+def build_register_expense_use_case() -> RegisterExpenseUseCase:
+    """Build the finance expense registration use case."""
+    settings = get_settings()
+    repository = FinanceSqliteRepository(db_path=settings.db_path)
+    return RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
 
 
 def build_market_analyst_port():
