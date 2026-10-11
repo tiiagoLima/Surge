@@ -39,7 +39,26 @@ python -m src.main
 # ou via entrypoint:
 surge scan --portfolio
 surge
+
+# 7. Iniciar o Bot Interativo no Telegram (Finanças)
+python -m src.main bot
+# ou via entrypoint:
+surge bot
 ```
+
+## Bot Interativo no Telegram (Finanças)
+
+```powershell
+# Executa o bot com menus interativos (long-polling):
+surge bot
+```
+
+- Envie `/start` ou `/menu` para abrir o menu com botões inline:
+  - `[➕ Registrar Gasto]` ➔ Selecione a categoria (`Alimentação`, `Lazer`, etc.) e envie o valor com descrição.
+  - `[📊 Resumo do Mês]` ➔ Veja o panorama financeiro com gastos, tetos, consumo % e alertas.
+  - `[🎯 Definir Teto]` ➔ Defina ou ajuste o limite mensal da categoria.
+- Envie `/cancelar` a qualquer momento para resetar a operação em andamento.
+- Restrição de segurança: apenas o `SURGE_TELEGRAM_CHAT_ID` autorizado consegue interagir.
 
 ## Templates e Notificação por E-mail
 
@@ -158,8 +177,8 @@ mypy src
 - [x] MVP `investment_scanner` (monitoramento B3/global, quedas >= 5%, alertas e-mail/Telegram)
 - [x] Bounded context de Finanças Pessoais (`finances`) com registro de despesas e controle de tetos por categoria
 - [x] Insights de mercado com Google Gemini via porta analítica desacoplada
+- [x] ChatOps bidirecional no Telegram (bot interativo com botões para despesas, tetos e resumo mensal)
 - [ ] Memória persistente (migração de memória em RAM para SQLite com embeddings e busca vetorial)
-- [ ] ChatOps bidirecional no Telegram (bot interativo com botões para despesas e alocação salarial)
 - [ ] Parser de holerite por e-mail (extração de valor líquido de salário)
 - [ ] Runtime de Agente Pessoal (ReAct loop com *tool calling* sobre as ferramentas de domínio)
 - [ ] Automações acadêmicas (IFMA: alertas de prazos e provas)
