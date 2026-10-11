@@ -312,6 +312,7 @@ Lint + testes unitários obrigatórios + build Docker.
 - [x] Regras de orçamento: limites, cálculo de consumo, alerta de 80% e estouro
 - [x] Portas `TransactionPort` e `BudgetPort` com adapter `FinanceSqliteRepository`
 - [x] `RegisterExpenseUseCase` implementado e coberto por testes unitários
+- [x] Inbound adapter do Telegram com menus inline (`surge bot`) para gastos, tetos e panorama mensal
 - [x] Integração consultiva do Gemini via `MarketAnalystPort` para síntese analítica
 - [x] Testes unitários com fakes rodando sem I/O real
 

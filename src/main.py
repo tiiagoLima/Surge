@@ -10,7 +10,12 @@ import argparse
 import logging
 import sys
 
+from src.finances.adapters.inbound.telegram_bot_adapter import TelegramFinanceBotAdapter
 from src.finances.adapters.outbound.sqlite_repository import FinanceSqliteRepository
+from src.finances.application.manage_budget_use_case import (
+    GetMonthlySummaryUseCase,
+    SetBudgetUseCase,
+)
 from src.finances.application.register_expense_use_case import RegisterExpenseUseCase
 from src.investments.adapters.inbound.imap_inbox_adapter import ImapInboxAdapter
 from src.investments.adapters.inbound.scheduler_trigger import SchedulerTrigger
@@ -79,6 +84,36 @@ def build_register_expense_use_case() -> RegisterExpenseUseCase:
     settings = get_settings()
     repository = FinanceSqliteRepository(db_path=settings.db_path)
     return RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
+
+
+def build_set_budget_use_case() -> SetBudgetUseCase:
+    """Build the finance set budget use case."""
+    settings = get_settings()
+    repository = FinanceSqliteRepository(db_path=settings.db_path)
+    return SetBudgetUseCase(budget_port=repository)
+
+
+def build_get_monthly_summary_use_case() -> GetMonthlySummaryUseCase:
+    """Build the finance monthly summary use case."""
+    settings = get_settings()
+    repository = FinanceSqliteRepository(db_path=settings.db_path)
+    return GetMonthlySummaryUseCase(transaction_port=repository, budget_port=repository)
+
+
+def build_telegram_finance_bot_adapter() -> TelegramFinanceBotAdapter:
+    """Build the Telegram Finance Bot inbound adapter."""
+    settings = get_settings()
+    repository = FinanceSqliteRepository(db_path=settings.db_path)
+    register_uc = RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
+    set_budget_uc = SetBudgetUseCase(budget_port=repository)
+    summary_uc = GetMonthlySummaryUseCase(transaction_port=repository, budget_port=repository)
+    return TelegramFinanceBotAdapter(
+        bot_token=settings.telegram_bot_token,
+        allowed_chat_id=settings.telegram_chat_id,
+        register_expense_use_case=register_uc,
+        set_budget_use_case=set_budget_uc,
+        get_summary_use_case=summary_uc,
+    )
 
 
 def build_market_analyst_port():
@@ -234,6 +269,9 @@ def main() -> None:
         help="Send a test email using configured SMTP credentials",
     )
 
+    # bot subcommand
+    subparsers.add_parser("bot", help="Run interactive Telegram Finance Bot (long polling)")
+
     args = parser.parse_args()
 
     settings = get_settings()
@@ -244,13 +282,36 @@ def main() -> None:
         stream=sys.stdout,
     )
 
-    # No subcommand -> scheduler (portfolio + radar di├írios)
+    # No subcommand -> scheduler (portfolio + radar diários)
     if args.command is None:
         print("Surge -- Personal Automation Hub")
         holdings_preview = build_manage_portfolio_use_case().list()
         watch = [h.ticker for h in holdings_preview] or "(vazia)"
         print(f"   holdings={watch} threshold={settings.drop_threshold}%")
         run_scheduler()
+        return
+
+    if args.command == "bot":
+        if (
+            not settings.telegram_enabled
+            or not settings.telegram_bot_token
+            or not settings.telegram_chat_id
+        ):
+            print(
+                "Erro: Telegram não configurado no .env "
+                "(SURGE_TELEGRAM_ENABLED=true, SURGE_TELEGRAM_BOT_TOKEN, SURGE_TELEGRAM_CHAT_ID)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        bot = build_telegram_finance_bot_adapter()
+        print(
+            f"Surge Telegram Bot iniciado para o chat ID: {settings.telegram_chat_id}.\n"
+            "Pressione Ctrl+C para encerrar."
+        )
+        try:
+            bot.start_polling()
+        except KeyboardInterrupt:
+            print("\nBot encerrado.")
         return
 
     if args.command == "portfolio":
