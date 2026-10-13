@@ -34,7 +34,8 @@ from src.investments.application.process_investment_emails_use_case import (
     ProcessInvestmentEmailsUseCase,
 )
 from src.investments.application.scan_portfolio_use_case import ScanPortfolioUseCase
-from src.memory.adapters.outbound.fake_semantic_memory import FakeSemanticMemoryAdapter
+from src.memory.adapters.outbound.sqlite_memory_repository import SqliteMemoryRepository
+from src.memory.application.manage_memory_use_case import ManageMemoryUseCase
 from src.memory.application.save_preference_use_case import SavePreferenceUseCase
 from src.memory.application.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
 from src.shared.config import get_settings
@@ -126,14 +127,25 @@ def build_market_analyst_port():
     return FakeAnalystAdapter()
 
 
+def build_memory_repository() -> SqliteMemoryRepository:
+    """Build the persistent SQLite memory repository."""
+    settings = get_settings()
+    return SqliteMemoryRepository(db_path=settings.db_path)
+
+
+def build_manage_memory_use_case() -> ManageMemoryUseCase:
+    """Build the use case to manage structured memories and preferences."""
+    return ManageMemoryUseCase(memory_storage=build_memory_repository())
+
+
 def build_save_preference_use_case() -> SavePreferenceUseCase:
-    """Build the semantic-memory preference use case."""
-    return SavePreferenceUseCase(memory_port=FakeSemanticMemoryAdapter())
+    """Build the preference use case backed by persistent storage."""
+    return SavePreferenceUseCase(memory_port=build_memory_repository())
 
 
 def build_search_semantic_memory_use_case() -> SearchSemanticMemoryUseCase:
-    """Build the semantic-memory search use case."""
-    return SearchSemanticMemoryUseCase(memory_port=FakeSemanticMemoryAdapter())
+    """Build the search memory use case backed by persistent storage."""
+    return SearchSemanticMemoryUseCase(memory_port=build_memory_repository())
 
 
 def build_manage_portfolio_use_case() -> ManagePortfolioUseCase:
@@ -274,6 +286,31 @@ def main() -> None:
     # bot subcommand
     subparsers.add_parser("bot", help="Run interactive Telegram Finance Bot (long polling)")
 
+    # memory subcommand
+    m_parser = subparsers.add_parser(
+        "memory", help="Manage persistent memories, decisions and preferences"
+    )
+    m_sub = m_parser.add_subparsers(dest="memory_cmd", required=True)
+
+    m_add = m_sub.add_parser("add", help="Add or update a memory entry")
+    m_add.add_argument("content", help="Memory content or preference text")
+    m_add.add_argument("--category", default="preference", help="Category (default: preference)")
+    m_add.add_argument("--user", default="default", help="User ID (default: default)")
+
+    m_list = m_sub.add_parser("list", help="List stored memories")
+    m_list.add_argument("--category", default=None, help="Filter by category")
+    m_list.add_argument("--user", default="default", help="Filter by user ID")
+    m_list.add_argument("--limit", type=int, default=50, help="Max entries (default: 50)")
+
+    m_search = m_sub.add_parser("search", help="Search memories by keyword")
+    m_search.add_argument("query", help="Keyword to search")
+    m_search.add_argument("--category", default=None, help="Filter by category")
+    m_search.add_argument("--user", default="default", help="Filter by user ID")
+    m_search.add_argument("--limit", type=int, default=10, help="Max results (default: 10)")
+
+    m_rm = m_sub.add_parser("remove", help="Delete a memory entry by ID")
+    m_rm.add_argument("memory_id", help="Memory entry ID")
+
     args = parser.parse_args()
 
     settings = get_settings()
@@ -387,6 +424,37 @@ def main() -> None:
 
     if args.command == "test-email":
         _cmd_test_email(args)
+        return
+
+    if args.command == "memory":
+        mem_uc = build_manage_memory_use_case()
+        if args.memory_cmd == "add":
+            entry = mem_uc.save(args.content, category=args.category, user_id=args.user)
+            print(f"Memória salva: {entry.summary()}")
+        elif args.memory_cmd == "list":
+            entries = mem_uc.list(user_id=args.user, category=args.category, limit=args.limit)
+            if not entries:
+                print("Nenhuma memória encontrada.")
+            else:
+                for item in entries:
+                    print(f"• {item.summary()}")
+        elif args.memory_cmd == "search":
+            results = mem_uc.search(
+                args.query, user_id=args.user, category=args.category, limit=args.limit
+            )
+            if not results:
+                print(f"Nenhuma memória encontrada para '{args.query}'.")
+            else:
+                print(f"Encontrado(s) {len(results)} registro(s) para '{args.query}':")
+                for match in results:
+                    print(f"• {match.summary()}")
+        elif args.memory_cmd == "remove":
+            deleted = mem_uc.delete(args.memory_id)
+            if deleted:
+                print(f"Memória removida com sucesso: {args.memory_id}")
+            else:
+                print(f"Memória não encontrada: {args.memory_id}", file=sys.stderr)
+                sys.exit(1)
         return
 
 

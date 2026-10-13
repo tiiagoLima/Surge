@@ -44,6 +44,12 @@ surge
 python -m src.main bot
 # ou via entrypoint:
 surge bot
+
+# 8. Gerenciar memórias, regras e preferências persistentes (SQLite)
+surge memory add "Prefiro empresas com payout de dividendos acima de 50%" --category preference
+surge memory list
+surge memory search "dividendos"
+surge memory remove <ID>
 ```
 
 ## Bot Interativo no Telegram (Finanças e Carteira)
@@ -153,12 +159,12 @@ src/
     application/ → manage, scan, radar e importação de e-mails
     adapters/    → inbound (IMAP, scheduler) e outbound (Brapi, yfinance, SQLite, Gemini, notificadores)
     assets/      → templates Jinja2 de alertas financeiros
-  memory/        → bounded context de memória semântica
-    domain/      → ISemanticMemoryPort
-    application/ → salvar preferências e buscar contexto
-    adapters/    → FakeSemanticMemoryAdapter provisório (evoluível para vector store)
+  memory/        → bounded context de memória e preferências
+    domain/      → MemoryEntry (models.py) e MemoryStoragePort (ports.py)
+    application/ → manage, save e search de memórias
+    adapters/    → SqliteMemoryRepository (surge.db) e FakeMemoryAdapter
   shared/        → infraestrutura transversal, incluindo config.py
-  main.py        → composition root e adapter CLI (portfolio, scan, test-email, finances)
+  main.py        → composition root e adapter CLI (portfolio, scan, memory, test-email, bot)
 agents/skill/   → instruções para IAs e colaboradores
 ```
 Cada contexto preserva seu próprio hexágono: domínio define portas, aplicação depende apenas delas e adapters implementam detalhes externos. O `main.py` é o único ponto que conhece e compõe os contexts. Sem hardcode: carteira via `surge portfolio add` (SQLite + validação Brapi); radar via Brapi `/api/quote/list`.
