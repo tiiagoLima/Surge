@@ -2,7 +2,13 @@
 
 from datetime import UTC, datetime
 
-from src.investments.domain.models import Holding, Opportunity, Quote
+from src.investments.domain.models import (
+    Holding,
+    Opportunity,
+    PortfolioSummary,
+    PositionSummary,
+    Quote,
+)
 
 
 def _quote(price: float = 95.0, prev: float = 100.0) -> Quote:
@@ -62,3 +68,33 @@ def test_opportunity_calculates_portfolio_pnl():
     assert opp.pnl_amount == 100
     assert opp.pnl_pct == 12.5
     assert "P&L +100.00 (+12.50%)" in opp.summary()
+
+
+def test_holding_total_cost_calculation():
+    h_with_avg = Holding(ticker="PETR4.SA", quantity=100.0, avg_price=34.50, currency="BRL")
+    assert h_with_avg.total_cost == 3450.0
+
+    h_without_avg = Holding(ticker="VALE3.SA", quantity=50.0, avg_price=None, currency="BRL")
+    assert h_without_avg.total_cost is None
+
+
+def test_portfolio_summary_models():
+    pos = PositionSummary(
+        ticker="PETR4.SA",
+        quantity=100.0,
+        currency="BRL",
+        avg_price=34.50,
+        total_cost=3450.0,
+    )
+    assert pos.ticker == "PETR4.SA"
+    assert pos.total_cost == 3450.0
+
+    summary = PortfolioSummary(
+        holdings=[pos],
+        total_positions=1,
+        total_invested=3450.0,
+        total_invested_by_currency={"BRL": 3450.0},
+    )
+    assert summary.total_positions == 1
+    assert summary.total_invested == 3450.0
+    assert summary.total_invested_by_currency["BRL"] == 3450.0

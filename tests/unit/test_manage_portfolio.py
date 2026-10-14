@@ -84,3 +84,33 @@ def test_remove_and_list():
     assert uc.remove("PETR4.SA") is True
     assert len(uc.list()) == 1
     assert uc.remove("UNKNOWN") is False
+
+
+def test_get_summary_calculates_costs_and_totals():
+    port = FakePortfolio()
+    quotes = FakeQuote({"PETR4.SA", "VALE3.SA"})
+    uc = ManagePortfolioUseCase(port, quotes)
+    uc.add("PETR4.SA", quantity=100.0, avg_price=34.50)
+    uc.add("VALE3.SA", quantity=50.0, avg_price=60.00)
+
+    summary = uc.get_summary()
+    assert summary.total_positions == 2
+    assert summary.total_invested == 6450.0
+    assert summary.total_invested_by_currency == {"BRL": 6450.0}
+
+    # Verify each position's calculated total cost
+    pos_map = {p.ticker: p for p in summary.holdings}
+    assert pos_map["PETR4.SA"].total_cost == 3450.0
+    assert pos_map["VALE3.SA"].total_cost == 3000.0
+
+
+def test_get_summary_empty_portfolio():
+    port = FakePortfolio()
+    quotes = FakeQuote(set())
+    uc = ManagePortfolioUseCase(port, quotes)
+
+    summary = uc.get_summary()
+    assert summary.total_positions == 0
+    assert summary.total_invested == 0.0
+    assert summary.total_invested_by_currency == {}
+    assert summary.holdings == []

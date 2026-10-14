@@ -67,6 +67,34 @@ class Holding:
     currency: str = "BRL"
     added_at: datetime | None = None
 
+    @property
+    def total_cost(self) -> float | None:
+        """Total invested cost basis for this position, or None if avg_price is unknown."""
+        if self.avg_price is None:
+            return None
+        return round(self.quantity * self.avg_price, 2)
+
+
+@dataclass(frozen=True)
+class PositionSummary:
+    """Summary of an individual position including calculated cost basis."""
+
+    ticker: str
+    quantity: float
+    currency: str
+    avg_price: float | None = None
+    total_cost: float | None = None
+
+
+@dataclass(frozen=True)
+class PortfolioSummary:
+    """Deterministic summary of the entire portfolio with precomputed totals."""
+
+    holdings: list[PositionSummary]
+    total_positions: int
+    total_invested: float
+    total_invested_by_currency: dict[str, float]
+
 
 @dataclass(frozen=True)
 class Opportunity:

@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     # Gemini
     gemini_api_key: str = Field(default="", alias="SURGE_GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="SURGE_GEMINI_MODEL")
     max_opportunities_per_scan: int = Field(default=10, alias="SURGE_MAX_OPPORTUNITIES_PER_SCAN")
 
     @property

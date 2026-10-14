@@ -24,13 +24,15 @@ class GeminiAnalystAdapter(MarketAnalystPort):
     gracefully degrades to a default string on any API failure.
     """
 
-    def __init__(self, api_key: str) -> None:
-        """Initialize the adapter with a Gemini API key.
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
+        """Initialize the adapter with a Gemini API key and model name.
 
         Args:
             api_key: The SURGE_GEMINI_API_KEY environment variable value.
+            model: The Gemini model name (default: gemini-2.5-flash).
         """
         self._api_key = api_key
+        self._model = model
         self._client: Any = None
         self._initialized = False
 
@@ -67,9 +69,7 @@ class GeminiAnalystAdapter(MarketAnalystPort):
                 f"e não dê recomendações de compra ou venda."
             )
 
-            response = self._client.models.generate_content(
-                model="gemini-3.8-flash", contents=prompt
-            )
+            response = self._client.models.generate_content(model=self._model, contents=prompt)
             text = (response.text or "").strip()
             if text:
                 return text

@@ -10,6 +10,13 @@ import argparse
 import logging
 import sys
 
+from src.agent.adapters.outbound.gemini_agent_model import GeminiAgentModel
+from src.agent.adapters.tools.portfolio_tools import (
+    GET_PORTFOLIO_HOLDINGS_TOOL,
+    make_get_portfolio_holdings_handler,
+)
+from src.agent.application.agent_runtime import AgentRuntime
+from src.agent.application.tool_registry import ToolRegistry
 from src.finances.adapters.inbound.telegram_bot_adapter import TelegramFinanceBotAdapter
 from src.finances.adapters.outbound.sqlite_repository import FinanceSqliteRepository
 from src.finances.application.manage_budget_use_case import (
@@ -123,7 +130,7 @@ def build_market_analyst_port():
     """Build Gemini when configured, otherwise use the safe fake adapter."""
     settings = get_settings()
     if settings.gemini_api_key:
-        return GeminiAnalystAdapter(api_key=settings.gemini_api_key)
+        return GeminiAnalystAdapter(api_key=settings.gemini_api_key, model=settings.gemini_model)
     return FakeAnalystAdapter()
 
 
@@ -177,6 +184,21 @@ def build_market_radar_use_case() -> MarketRadarUseCase:
         analyst=build_market_analyst_port(),
         max_opportunities=settings.max_opportunities_per_scan,
     )
+
+
+def build_agent_runtime() -> AgentRuntime:
+    """Build the Surge Agent Runtime wired with portfolio tools and Gemini."""
+    settings = get_settings()
+    portfolio_uc = build_manage_portfolio_use_case()
+
+    registry = ToolRegistry()
+    registry.register_tool(
+        definition=GET_PORTFOLIO_HOLDINGS_TOOL,
+        handler=make_get_portfolio_holdings_handler(portfolio_uc),
+    )
+
+    model = GeminiAgentModel(api_key=settings.gemini_api_key, model=settings.gemini_model)
+    return AgentRuntime(model=model, tool_registry=registry)
 
 
 def run_scheduler() -> None:
@@ -310,6 +332,15 @@ def main() -> None:
 
     m_rm = m_sub.add_parser("remove", help="Delete a memory entry by ID")
     m_rm.add_argument("memory_id", help="Memory entry ID")
+
+    # ask subcommand
+    ask_parser = subparsers.add_parser(
+        "ask", help="Ask Surge Personal Assistant a question using tool calling"
+    )
+    ask_parser.add_argument(
+        "prompt",
+        help="Question for Surge (e.g. 'Quais ativos eu tenho na minha carteira?')",
+    )
 
     args = parser.parse_args()
 
@@ -455,6 +486,22 @@ def main() -> None:
             else:
                 print(f"Memória não encontrada: {args.memory_id}", file=sys.stderr)
                 sys.exit(1)
+        return
+
+    if args.command == "ask":
+        settings = get_settings()
+        if not settings.gemini_api_key:
+            print(
+                "Aviso: Chave da API Gemini não configurada (SURGE_GEMINI_API_KEY).\n"
+                "Configure a chave no .env para utilizar o assistente.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        runtime = build_agent_runtime()
+        print("Surge pensando...\n")
+        reply = runtime.run(args.prompt)
+        print(reply)
         return
 
 
