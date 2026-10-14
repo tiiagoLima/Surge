@@ -51,6 +51,12 @@ O Surge evolui de um orquestrador determinístico orientado a scripts para um **
 - **Core de Negócio:** Mantém regras matemáticas e persistência estritamente determinísticas em Python puro e SQLite.
 - **Agent Runtime:** Um loop de raciocínio controlado que interpreta intenções em linguagem natural, recupera contexto histórico da memória e orquestra execuções através de *tool calling* sobre os casos de uso existentes.
 
+### ADR-0011 — Persistência de Memória em SQLite e Desacoplamento Textual vs. Semântico
+A memória do Surge é estruturada com separação formal de responsabilidades:
+- **Modelo de Domínio Rico:** Introduzida a entidade `MemoryEntry` (id, content, category, user_id, timestamps).
+- **Contratos Específicos:** A porta `MemoryStoragePort` gerencia a persistência estruturada de fatos, decisões e preferências e provê busca textual parametrizada. O contrato `ISemanticMemoryPort` permanece reservado para recuperação por similaridade vetorial (embeddings) em fases posteriores.
+- **Armazenamento Unificado:** Implementado o adaptador `SqliteMemoryRepository` na tabela `memory_entries` em `surge.db`, garantindo persistência atômica, sobrevivência entre reinícios e ciclo de vida compartilhado no composition root (`src/main.py`).
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```
@@ -75,10 +81,10 @@ surge/
 │   │   │   ├── inbound/            # IMAP e scheduler
 │   │   │   └── outbound/           # Brapi, yfinance, SQLite, Gemini e notificadores
 │   │   └── assets/templates/       # templates Jinja2 financeiros
-│   ├── memory/                     # bounded context de memória semântica
-│   │   ├── domain/                 # ISemanticMemoryPort
-│   │   ├── application/            # salvar preferências e buscar contexto
-│   │   └── adapters/outbound/      # fake em memória, evoluível para vector store
+│   ├── memory/                     # bounded context de memória e preferências
+│   │   ├── domain/                 # models (MemoryEntry) e ports (MemoryStoragePort)
+│   │   ├── application/            # use cases (manage_memory, save_preference, search_memory)
+│   │   └── adapters/outbound/      # sqlite_memory_repository.py, fake_memory_adapter.py
 │   ├── shared/
 │   │   └── config.py               # configuração transversal
 │   └── main.py                     # composition root e CLI
@@ -316,10 +322,12 @@ Lint + testes unitários obrigatórios + build Docker.
 - [x] Integração consultiva do Gemini via `MarketAnalystPort` para síntese analítica
 - [x] Testes unitários com fakes rodando sem I/O real
 
-### Fase 3 — Memória Semântica Persistente
-- [ ] Persistência de preferências em SQLite (`memory_store`)
-- [ ] Ciclo de vida unificado da memória no composition root (`src/main.py`)
-- [ ] Integração com geração de embeddings e busca híbrida (FTS5 + similaridade vetorial)
+### Fase 3 — Memória Persistente e Semântica
+- [x] Persistência de preferências e fatos em SQLite (`memory_entries`)
+- [x] Entidade de domínio rica `MemoryEntry` e contrato `MemoryStoragePort` desacoplado de vetores
+- [x] Ciclo de vida unificado da memória no composition root (`src/main.py`) e CLI (`surge memory`)
+- [x] Testes de persistência com validação de sobrevivência a reinício de processo
+- [ ] Integração com geração de embeddings e busca híbrida (similaridade vetorial / ChromaDB / sqlite-vec)
 
 ### Fase 4 — Agent Runtime & ChatOps
 - [ ] Runtime de agente com loop ReAct / Tool Calling
