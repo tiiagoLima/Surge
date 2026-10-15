@@ -14,7 +14,10 @@ GET_PORTFOLIO_HOLDINGS_TOOL = ToolDefinition(
     description=(
         "Consulta os ativos e posições custodiados na carteira do usuário. "
         "Retorna lista de ativos com ticker, quantidade, moeda, preço médio, "
-        "custo total por posição e total investido calculado."
+        "custo total por posição e total investido calculado. "
+        "total_invested é null quando há moedas diferentes ou preço médio ausente; "
+        "total_invested_by_currency soma apenas custos conhecidos por moeda e pode ser parcial. "
+        "Não some moedas diferentes nem estime custos ausentes."
     ),
     parameters={
         "type": "object",

@@ -54,7 +54,7 @@ def test_handler_returns_holdings_with_exact_fields() -> None:
     assert "holdings" in data
     assert len(data["holdings"]) == 2
     assert data["total_positions"] == 2
-    assert data["total_invested"] == 3450.0
+    assert data["total_invested"] is None
     assert data["total_invested_by_currency"] == {"BRL": 3450.0}
 
     petr = data["holdings"][0]
@@ -87,8 +87,8 @@ def test_handler_multi_asset_deterministic_calculations() -> None:
     data = json.loads(result_json)
 
     assert data["total_positions"] == 3
-    # Deterministic calculations: PETR4 (3000) + VALE3 (3000) + AAPL (1500) = 7500.0
-    assert data["total_invested"] == 7500.0
+    # BRL and USD costs must not be added without an explicit currency conversion.
+    assert data["total_invested"] is None
     assert data["total_invested_by_currency"] == {
         "BRL": 6000.0,
         "USD": 1500.0,

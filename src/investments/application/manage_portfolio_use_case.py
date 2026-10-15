@@ -115,7 +115,11 @@ class ManagePortfolioUseCase:
                 )
             )
 
-        total_invested = round(sum(by_currency.values()), 2)
+        total_invested = (
+            round(sum(by_currency.values()), 2)
+            if len(by_currency) <= 1 and all(item.total_cost is not None for item in items)
+            else None
+        )
         return PortfolioSummary(
             holdings=items,
             total_positions=len(items),

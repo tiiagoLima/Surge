@@ -24,7 +24,7 @@ class GeminiAnalystAdapter(MarketAnalystPort):
     gracefully degrades to a default string on any API failure.
     """
 
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3.8-flash") -> None:
         """Initialize the adapter with a Gemini API key and model name.
 
         Args:

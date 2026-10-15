@@ -88,11 +88,14 @@ class PositionSummary:
 
 @dataclass(frozen=True)
 class PortfolioSummary:
-    """Deterministic summary of the entire portfolio with precomputed totals."""
+    """Precomputed costs; the overall total requires one currency and all prices.
+
+    Currency subtotals include only positions with a known average price.
+    """
 
     holdings: list[PositionSummary]
     total_positions: int
-    total_invested: float
+    total_invested: float | None
     total_invested_by_currency: dict[str, float]
 
 

@@ -22,6 +22,23 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _normalize_gemini_schema(schema: Any) -> Any:
+    """Copy a schema, omitting additionalProperties at the Gemini API boundary."""
+    if isinstance(schema, list):
+        return [_normalize_gemini_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    normalized: dict[str, Any] = {}
+    for key, value in schema.items():
+        # The Gemini API rejects this JSON-Schema keyword in function parameters.
+        # Keep it in the internal contract, but omit it at the provider boundary.
+        if key == "additionalProperties":
+            continue
+        normalized[key] = _normalize_gemini_schema(value)
+    return normalized
+
+
 def _is_provider_call_id(call_id: str | None) -> bool:
     """Check if tool call ID was provided by Gemini rather than generated locally."""
     if not call_id:
@@ -123,7 +140,8 @@ class GeminiAgentModel(AgentModelPort):
                     if provider_id and fr_obj:
                         fr_obj.id = provider_id
 
-                gemini_contents.append(types.Content(role="tool", parts=[part]))
+                # Gemini represents function responses as user-role content.
+                gemini_contents.append(types.Content(role="user", parts=[part]))
 
         # Prepare tools configuration
         function_declarations: list[Any] = []
@@ -132,7 +150,7 @@ class GeminiAgentModel(AgentModelPort):
                 fd = types.FunctionDeclaration(
                     name=tool_def.name,
                     description=tool_def.description,
-                    parameters=tool_def.parameters,
+                    parameters=_normalize_gemini_schema(tool_def.parameters),
                 )
                 function_declarations.append(fd)
 
