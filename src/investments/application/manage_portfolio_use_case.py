@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-from src.investments.domain.models import Holding
+from src.investments.domain.models import Holding, PortfolioSummary, PositionSummary
 from src.investments.domain.ports import PortfolioPort, QuotePort
 
 logger = logging.getLogger(__name__)
@@ -94,3 +94,35 @@ class ManagePortfolioUseCase:
             if "." not in alt:
                 holding = self._portfolio.get_holding(f"{alt}.SA")
         return holding
+
+    def get_summary(self) -> PortfolioSummary:
+        """Return a deterministic summary with per-position cost and total invested."""
+        holdings = self.list()
+        items: list[PositionSummary] = []
+        by_currency: dict[str, float] = {}
+
+        for h in holdings:
+            cost = h.total_cost
+            if cost is not None:
+                by_currency[h.currency] = round(by_currency.get(h.currency, 0.0) + cost, 2)
+            items.append(
+                PositionSummary(
+                    ticker=h.ticker,
+                    quantity=h.quantity,
+                    currency=h.currency,
+                    avg_price=h.avg_price,
+                    total_cost=cost,
+                )
+            )
+
+        total_invested = (
+            round(sum(by_currency.values()), 2)
+            if len(by_currency) <= 1 and all(item.total_cost is not None for item in items)
+            else None
+        )
+        return PortfolioSummary(
+            holdings=items,
+            total_positions=len(items),
+            total_invested=total_invested,
+            total_invested_by_currency=by_currency,
+        )

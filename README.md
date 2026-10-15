@@ -50,6 +50,9 @@ surge memory add "Prefiro empresas com payout de dividendos acima de 50%" --cate
 surge memory list
 surge memory search "dividendos"
 surge memory remove <ID>
+
+# 9. Conversar com o Surge Assistant via CLI (Tool Calling)
+surge ask "Quais ativos eu tenho na minha carteira?"
 ```
 
 ## Bot Interativo no Telegram (Finanças e Carteira)
@@ -72,6 +75,34 @@ surge bot
   - `/remover PETR4` ➔ Remove ativo diretamente.
   - `/cancelar` ➔ Cancela a operação em andamento.
 - Restrição de segurança: apenas o `SURGE_TELEGRAM_CHAT_ID` autorizado consegue interagir.
+
+## Assistente Pessoal Contextual (`surge ask`)
+
+O Surge inclui um **Agent Runtime determinístico com Tool Calling**:
+
+```powershell
+# Faz uma pergunta em linguagem natural ao assistente:
+surge ask "Quais ativos eu tenho na minha carteira?"
+```
+
+- **Arquitetura de Segurança:**
+  - O assistente **não executa código**, não roda comandos de terminal (`bash`/`cmd`), não acessa arquivos locais ou o sistema de arquivos e não navega na internet aberta.
+  - Pedidos para programar, gerar, revisar, debugar ou executar código, bem como comandos de terminal ou acesso a arquivos locais, são **terminantemente recusados** sem acionamento de ferramentas.
+  - Apenas ferramentas explicitamente cadastradas em uma allowlist no `ToolRegistry` podem ser acionadas pelo modelo.
+  - **Validação Estrita:** todos os argumentos enviados pelo modelo são validados por tipo e campos extras são terminantemente rejeitados antes da execução.
+  - **Limite Seguro de Turnos:** máximo configurável de chamadas de modelo (`max_model_turns = 3`) para evitar loops infinitos.
+  - **Preservação de IDs de Função:** identificadores de chamada de função do Gemini são rigorosamente preservados na resposta da ferramenta; IDs locais de fallback não são enviados como IDs de correlação do provedor.
+  - **Ferramentas Atuais:** exclusivamente `get_portfolio_holdings` (somente leitura). Não há ferramentas de alteração de dados nesta etapa.
+  - **Cálculos Financeiros Determinísticos:** O custo por posição e o total investido (inclusive segmentado por moeda) são calculados previamente em Python no caso de uso (`ManagePortfolioUseCase.get_summary()`). O modelo de IA nunca realiza contas ou estimativas aritméticas, utilizando apenas os valores consolidados exatos.
+  - **Aviso de Privacidade:** para responder perguntas sobre a carteira, os dados necessários dos ativos custodiados (ticker, cotas, preço médio e moeda) são transmitidos via API criptografada para o provedor Gemini configurado (`SURGE_GEMINI_MODEL`, padrão `gemini-2.5-flash`). Payloads financeiros nunca são expostos em logs.
+  - **Validação Ponta a Ponta Manual:** os testes automatizados de unidade rodam 100% offline via `FakeAgentModel` e fakes de portas. O teste real com a API do Google Gemini requer chave real configurada em `.env` e deve ser executado manualmente:
+    ```bash
+    # 1. Definir SURGE_GEMINI_API_KEY no .env
+    # 2. Executar consulta de teste:
+    surge ask "Quais ativos eu tenho na minha carteira?"
+    # 3. Testar recusa de programação:
+    surge ask "Escreva um script Python para listar meus arquivos"
+    ```
 
 ## Templates e Notificação por E-mail
 
@@ -125,6 +156,7 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 | `SURGE_BRAPI_TOKEN` | — | Token da Brapi (opcional) |
 | `SURGE_BRAPI_BASE_URL` | `https://brapi.dev` | URL base da API Brapi |
 | `SURGE_GEMINI_API_KEY` | — | Chave de API do Google Gemini para insights |
+| `SURGE_GEMINI_MODEL` | `gemini-2.5-flash` | Modelo Gemini configurável para insights e Agent Runtime |
 | `SURGE_MAX_OPPORTUNITIES_PER_SCAN` | `10` | Limite máximo de oportunidades por scan |
 | `SURGE_TIMEZONE` | `America/Sao_Paulo` | Fuso horário da aplicação |
 | `SURGE_LOG_LEVEL` | `INFO` | Nível de log (DEBUG, INFO, WARNING) |
@@ -150,6 +182,10 @@ docker compose -f docker/docker-compose.yml run --rm surge surge scan --radar
 
 ```
 src/
+  agent/         → bounded context do assistente pessoal e runtime
+    domain/      → models.py (AgentMessage, ToolCall) e ports.py (AgentModelPort)
+    application/ → agent_runtime.py (loop conversacional) e tool_registry.py
+    adapters/    → outbound (GeminiAgentModel, FakeAgentModel) e tools (portfolio_tools)
   finances/      → bounded context de finanças pessoais (despesas, orçamento)
     domain/      → models.py (Transaction, CategoryBudget) e ports.py
     application/ → register_expense_use_case.py
@@ -164,7 +200,7 @@ src/
     application/ → manage, save e search de memórias
     adapters/    → SqliteMemoryRepository (surge.db) e FakeMemoryAdapter
   shared/        → infraestrutura transversal, incluindo config.py
-  main.py        → composition root e adapter CLI (portfolio, scan, memory, test-email, bot)
+  main.py        → composition root e adapter CLI (portfolio, scan, memory, ask, test-email, bot)
 agents/skill/   → instruções para IAs e colaboradores
 ```
 Cada contexto preserva seu próprio hexágono: domínio define portas, aplicação depende apenas delas e adapters implementam detalhes externos. O `main.py` é o único ponto que conhece e compõe os contexts. Sem hardcode: carteira via `surge portfolio add` (SQLite + validação Brapi); radar via Brapi `/api/quote/list`.

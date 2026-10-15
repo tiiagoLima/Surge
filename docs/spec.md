@@ -57,6 +57,18 @@ A memória do Surge é estruturada com separação formal de responsabilidades:
 - **Contratos Específicos:** A porta `MemoryStoragePort` gerencia a persistência estruturada de fatos, decisões e preferências e provê busca textual parametrizada. O contrato `ISemanticMemoryPort` permanece reservado para recuperação por similaridade vetorial (embeddings) em fases posteriores.
 - **Armazenamento Unificado:** Implementado o adaptador `SqliteMemoryRepository` na tabela `memory_entries` em `surge.db`, garantindo persistência atômica, sobrevivência entre reinícios e ciclo de vida compartilhado no composition root (`src/main.py`).
 
+### ADR-0012 — Runtime Mínimo do Agente com Tool Calling Estrito e Determinístico
+O Surge implementa o bounded context `src/agent/` para orquestrar conversação assistiva por chamadas de função (Function Calling):
+- **Contrato Neutro de Modelo:** A interface `AgentModelPort` abstrai a comunicação com LLMs, permitindo execução 100% determinística nos testes via `FakeAgentModel` e conexão real via `GeminiAgentModel` (`SURGE_GEMINI_MODEL`, padrão `gemini-2.5-flash`). A configuração `SURGE_GEMINI_MODEL` é compartilhada com o `GeminiAnalystAdapter` (previamente com modelo fixo), preservando seu comportamento de fallback e sem alterar sua lógica de negócio.
+- **Tool Registry com Validação Rigorosa:** O modelo nunca executa funções diretamente. As ferramentas residem em uma allowlist explícita no `ToolRegistry`, com validação estrita de tipos, campos obrigatórios e rejeição de campos extras.
+- **Salvaguardas de Execução:** Limite rígido de turnos de modelo (`max_model_turns = 3`) previne loops infinitos. Em caso de exceções, os detalhes técnicos ficam restritos aos logs (`logger.exception`) e mensagens controladas são retornadas ao modelo.
+- **Preservação de IDs de Função:** O adapter Gemini preserva com precisão o identificador de chamada de função (`FunctionCall.id` e `FunctionResponse.id`) entre as rodadas conversacionais. IDs locais de fallback não são enviados ao provedor como IDs de correlação.
+- **Restrição Contra Tarefas de Programação:** O Surge é estritamente um assistente pessoal para finanças e investimentos. Pedidos de escrita, revisão, debug ou execução de código, bem como solicitações de acesso ao sistema de arquivos local ou comandos de terminal, são categoricamente recusados pelo runtime sem acionamento de ferramentas.
+- **Cálculos Determinísticos em Python:** O modelo de IA nunca é encarregado de realizar operações aritméticas ou cálculos financeiros. O domínio (`Holding.total_cost`) e o caso de uso de aplicação (`ManagePortfolioUseCase.get_summary()`) calculam de forma determinística em Python o custo total por posição (`quantity * avg_price`), o total de posições e o total investido (inclusive agrupado por moeda) antes de disponibilizar os dados via `get_portfolio_holdings`.
+  - `total_invested` é `null` quando há múltiplas moedas ou qualquer posição sem `avg_price`; não há conversão cambial nem estimativa de custos ausentes. Carteira vazia mantém total zero. `total_invested_by_currency` contém a soma dos custos conhecidos por moeda, podendo ser parcial quando faltam preços médios. Posições sem preço médio continuam listadas, sem `avg_price` e sem `total_cost` no payload.
+- **Somente Leitura e Privacidade:** Nesta primeira etapa, apenas a ferramenta `get_portfolio_holdings` é disponibilizada (estritamente leitura). Não há acesso a shell, arquivos, código ou escrita. Os dados estritamente necessários da carteira são transmitidos ao provedor do modelo para compor a resposta, e o payload financeiro nunca é exposto em logs.
+- **Estratégia de Testes Sem Mocks de Framework:** Testes de domínio, aplicação e ferramentas utilizam fakes explícitos em memória (como `FakePortfolioUseCase` e `FakeAgentModel`), reservando doubles do SDK externo exclusivamente para os testes de adapters.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```
@@ -70,6 +82,10 @@ surge/
 │       ├── new-automation.md
 │       └── testing-guidelines.md
 ├── src/
+│   ├── agent/                      # bounded context do assistente pessoal e runtime
+│   │   ├── domain/                 # models (AgentMessage, ToolCall, ToolResult) e ports
+│   │   ├── application/            # agent_runtime.py, tool_registry.py
+│   │   └── adapters/               # outbound (gemini_agent_model, fake_agent_model) e tools
 │   ├── finances/                   # bounded context de finanças pessoais
 │   │   ├── domain/                 # models (Transaction, CategoryBudget) e ports.py
 │   │   ├── application/            # register_expense_use_case.py
@@ -330,8 +346,13 @@ Lint + testes unitários obrigatórios + build Docker.
 - [ ] Integração com geração de embeddings e busca híbrida (similaridade vetorial / ChromaDB / sqlite-vec)
 
 ### Fase 4 — Agent Runtime & ChatOps
-- [ ] Runtime de agente com loop ReAct / Tool Calling
-- [ ] Bot interativo no Telegram com menus para registro de gastos e divisão de salário
+- [x] Runtime de agente com loop conversacional e Tool Calling seguro (`src/agent/`)
+- [x] Contrato neutro `AgentModelPort`, simulador `FakeAgentModel` e adaptador Gemini (`SURGE_GEMINI_MODEL`)
+- [x] Allowlist e validação estrita de argumentos no `ToolRegistry` (rejeição de campos extras)
+- [x] Ferramenta de leitura de carteira `get_portfolio_holdings` sem cálculos ad-hoc no adapter
+- [x] Subcomando CLI `surge ask` para experimentação de ponta a ponta
+- [ ] Integração do Runtime com o bot interativo do Telegram
+- [ ] Persistência de sessões de conversa e consolidação de memória
 - [ ] Parser de e-mails de folha de pagamento (extração de valor líquido)
 - [ ] Resumos semanais consolidados com insights contextuais da IA
 
