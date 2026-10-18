@@ -17,6 +17,7 @@ from src.agent.adapters.tools.portfolio_tools import (
     make_get_portfolio_holdings_handler,
 )
 from src.agent.application.agent_runtime import AgentRuntime
+from src.agent.application.execution_coordinator import ExecutionCoordinator
 from src.agent.application.tool_registry import ToolRegistry
 from src.agent.domain.capabilities import (
     CapabilityDefinition,
@@ -110,6 +111,21 @@ def get_runtime_capabilities() -> RuntimeAvailability:
     """Declare configured resources without probing provider or service health."""
     settings = get_settings()
     return RuntimeAvailability(llm=bool(settings.gemini_api_key), network=True, storage=True)
+
+
+def build_execution_coordinator(
+    *,
+    availability: RuntimeAvailability | None = None,
+    health=None,
+    execution_records=None,
+) -> ExecutionCoordinator:
+    """Build an execution coordinator from explicit runtime dependencies."""
+    return ExecutionCoordinator(
+        registry=build_capability_registry(),
+        availability=availability or get_runtime_capabilities(),
+        health=health,
+        execution_records=execution_records or build_execution_record_repository(),
+    )
 
 
 def _build_ports():
