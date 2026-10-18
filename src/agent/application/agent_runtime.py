@@ -59,7 +59,8 @@ class AgentRuntime:
             try:
                 reply = self._model.generate_reply(messages, tools=tools)
             except Exception:
-                logger.exception("Falha na comunicação com o modelo de inteligência artificial.")
+                # Includes neutral ProviderError; never log SDK details or traceback.
+                logger.warning("Falha na comunicação com o modelo de inteligência artificial.")
                 return (
                     "Desculpe, ocorreu uma falha ao comunicar com o modelo de IA. "
                     "Por favor, tente novamente mais tarde."

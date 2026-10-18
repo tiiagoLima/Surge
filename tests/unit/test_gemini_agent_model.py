@@ -11,8 +11,10 @@ from src.agent.adapters.outbound.gemini_agent_model import (
     _is_provider_call_id,
     _normalize_gemini_schema,
 )
+from src.agent.adapters.outbound.provider_failure_classifier import ProviderError
 from src.agent.adapters.tools.portfolio_tools import GET_PORTFOLIO_HOLDINGS_TOOL
 from src.agent.domain.models import AgentMessage, ToolCall, ToolDefinition
+from src.agent.domain.provider_health import ProviderFailureKind, ProviderHealthStatus
 
 
 @pytest.mark.parametrize(
@@ -141,8 +143,9 @@ def test_gemini_agent_model_accepts_nested_strict_schema_without_mutation() -> N
 
 def test_gemini_agent_model_empty_api_key_raises() -> None:
     model = GeminiAgentModel(api_key="  ")
-    with pytest.raises(ValueError, match="SURGE_GEMINI_API_KEY não configurada"):
+    with pytest.raises(ProviderError) as caught:
         model.generate_reply([AgentMessage(role="user", content="Olá")])
+    assert caught.value.failure.kind == ProviderFailureKind.CONFIGURATION
 
 
 def test_gemini_agent_model_successful_text_generation() -> None:
@@ -319,5 +322,52 @@ def test_gemini_agent_model_api_error_logged_and_raised() -> None:
     model = GeminiAgentModel(api_key="fake-key")
     model._client = mock_client
 
-    with pytest.raises(RuntimeError, match="Quota exceeded"):
+    with pytest.raises(ProviderError) as caught:
         model.generate_reply([AgentMessage(role="user", content="Olá")])
+    assert caught.value.failure.kind == ProviderFailureKind.RATE_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (RuntimeError("429 token=hidden"), ProviderHealthStatus.DEGRADED),
+        (RuntimeError("403 token=hidden"), ProviderHealthStatus.UNAVAILABLE),
+    ],
+)
+def test_health_failure_and_recovery(
+    error: Exception, status: ProviderHealthStatus, caplog
+) -> None:
+    model = GeminiAgentModel(api_key="fake-key")
+    client = MagicMock()
+    model._client = client
+    initial = model.get_health()
+    assert initial.status == ProviderHealthStatus.DEGRADED
+    client.models.generate_content.side_effect = error
+    with pytest.raises(ProviderError):
+        model.generate_reply([AgentMessage(role="user", content="private prompt")])
+    assert model.get_health().status == status
+    assert model.get_health().failure is not None
+    assert "hidden" not in caplog.text
+    assert "private prompt" not in caplog.text
+    client.models.generate_content.side_effect = None
+    client.models.generate_content.return_value.text = "OK"
+    client.models.generate_content.return_value.function_calls = None
+    model.generate_reply([])
+    assert model.get_health().status == ProviderHealthStatus.AVAILABLE
+    assert model.get_health().failure is None
+    assert initial.status == ProviderHealthStatus.DEGRADED
+
+
+def test_metadata_probe_and_cached_health() -> None:
+    model = GeminiAgentModel(api_key="fake-key", model="test-model")
+    client = MagicMock()
+    model._client = client
+    model.get_health()
+    client.models.get.assert_not_called()
+    assert model.check_health().status == ProviderHealthStatus.AVAILABLE
+    client.models.get.assert_called_once_with(model="test-model")
+    client.models.generate_content.assert_not_called()
+    client.models.get.side_effect = TimeoutError()
+    assert model.check_health().status == ProviderHealthStatus.DEGRADED
+    assert model.get_health().failure.kind == ProviderFailureKind.TIMEOUT
+    assert GeminiAgentModel(api_key="").check_health().status == ProviderHealthStatus.UNAVAILABLE

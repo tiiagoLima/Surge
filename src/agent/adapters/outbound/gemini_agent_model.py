@@ -9,8 +9,17 @@ import logging
 import uuid
 from typing import Any
 
+from src.agent.adapters.outbound.provider_failure_classifier import (
+    ProviderError,
+    classify_provider_exception,
+)
 from src.agent.domain.models import AgentMessage, ToolCall, ToolDefinition
 from src.agent.domain.ports import AgentModelPort
+from src.agent.domain.provider_health import (
+    ProviderHealth,
+    ProviderHealthPort,
+    ProviderHealthStatus,
+)
 
 try:
     genai: Any = importlib.import_module("google.genai")
@@ -46,7 +55,7 @@ def _is_provider_call_id(call_id: str | None) -> bool:
     return not call_id.startswith("local_call_")
 
 
-class GeminiAgentModel(AgentModelPort):
+class GeminiAgentModel(AgentModelPort, ProviderHealthPort):
     """Adapter invoking Gemini models using the official google-genai SDK."""
 
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
@@ -54,6 +63,40 @@ class GeminiAgentModel(AgentModelPort):
         self._api_key = str(api_key).strip()
         self._model = model
         self._client: Any = None
+        self._health = ProviderHealth(
+            "gemini",
+            self._model,
+            ProviderHealthStatus.DEGRADED if self._api_key else ProviderHealthStatus.UNAVAILABLE,
+        )
+
+    def get_health(self) -> ProviderHealth:
+        """Return the last in-memory observation without contacting Gemini."""
+        return self._health
+
+    def _record_failure(self, exc: Exception) -> ProviderError:
+        failure = classify_provider_exception(exc, "gemini", self._model)
+        self._health = ProviderHealth(
+            "gemini",
+            self._model,
+            (
+                ProviderHealthStatus.DEGRADED
+                if failure.retryable
+                else ProviderHealthStatus.UNAVAILABLE
+            ),
+            failure,
+        )
+        logger.warning("Gemini: %s", failure.message)
+        return ProviderError(failure, exc)
+
+    def check_health(self) -> ProviderHealth:
+        """Explicitly probe model metadata without generating text."""
+        try:
+            self._ensure_client().models.get(model=self._model)
+        except Exception as exc:
+            self._record_failure(exc)
+        else:
+            self._health = ProviderHealth("gemini", self._model, ProviderHealthStatus.AVAILABLE)
+        return self._health
 
     def _ensure_client(self) -> Any:
         if self._client is not None:
@@ -70,7 +113,20 @@ class GeminiAgentModel(AgentModelPort):
         messages: list[AgentMessage],
         tools: list[ToolDefinition] | None = None,
     ) -> AgentMessage:
-        """Generate response from Gemini, converting messages and tool definitions."""
+        """Generate a response, recording health and exposing only neutral failures."""
+        try:
+            reply = self._generate_reply(messages, tools)
+        except Exception as exc:
+            raise self._record_failure(exc) from None
+        self._health = ProviderHealth("gemini", self._model, ProviderHealthStatus.AVAILABLE)
+        return reply
+
+    def _generate_reply(
+        self,
+        messages: list[AgentMessage],
+        tools: list[ToolDefinition] | None = None,
+    ) -> AgentMessage:
+        """Translate messages and tool definitions for the SDK."""
         client = self._ensure_client()
 
         system_instruction: str | None = None
@@ -166,15 +222,11 @@ class GeminiAgentModel(AgentModelPort):
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
-        try:
-            response = client.models.generate_content(
-                model=self._model,
-                contents=gemini_contents,
-                config=config,
-            )
-        except Exception:
-            logger.exception("Erro ao chamar API do Gemini para o modelo '%s'", self._model)
-            raise
+        response = client.models.generate_content(
+            model=self._model,
+            contents=gemini_contents,
+            config=config,
+        )
 
         # Parse response into AgentMessage
         tool_calls: list[ToolCall] = []

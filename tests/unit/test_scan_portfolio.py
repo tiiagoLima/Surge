@@ -1,7 +1,9 @@
 """Unit tests for ScanPortfolioUseCase."""
 
 from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
+from src.investments.adapters.outbound.gemini_analyst_adapter import GeminiAnalystAdapter
 from src.investments.application.scan_portfolio_use_case import ScanPortfolioUseCase
 from src.investments.domain.models import Holding, Opportunity, Quote
 from src.investments.domain.ports import (
@@ -141,3 +143,30 @@ def test_scan_portfolio_empty_holdings():
     uc = ScanPortfolioUseCase(portfolio, quotes, notifier, storage)
     assert uc.execute() == []
     assert notifier.sent == []
+
+
+def test_scan_continues_deterministically_when_gemini_fails() -> None:
+    notifier = FakeNotifier()
+    storage = FakeStorage()
+    analyst = GeminiAnalystAdapter("fake-key")
+    client = MagicMock()
+    client.models.generate_content.side_effect = TimeoutError("provider timeout")
+    with patch("src.investments.adapters.outbound.gemini_analyst_adapter.genai") as sdk:
+        sdk.Client.return_value = client
+        use_case = ScanPortfolioUseCase(
+            FakePortfolio([_holding("PETR4.SA"), _holding("VALE3.SA")]),
+            FakeQuote({ticker: _quote(ticker, 90, 100) for ticker in ("PETR4.SA", "VALE3.SA")}),
+            notifier,
+            storage,
+            analyst=analyst,
+        )
+        opportunities = use_case.execute()
+    assert len(opportunities) == 2
+    assert all(opportunity.drop_pct == -10 for opportunity in opportunities)
+    assert all(
+        opportunity.insight == "Insight indisponível devido a erro na API de análise."
+        for opportunity in opportunities
+    )
+    assert len(storage.quotes) == 2
+    assert len(storage.opps) == 2
+    assert notifier.sent == [opportunities]

@@ -4,6 +4,10 @@ import json
 from typing import Any
 
 from src.agent.adapters.outbound.fake_agent_model import FakeAgentModel
+from src.agent.adapters.outbound.provider_failure_classifier import (
+    ProviderError,
+    classify_provider_exception,
+)
 from src.agent.adapters.tools.portfolio_tools import (
     GET_PORTFOLIO_HOLDINGS_TOOL,
     make_get_portfolio_holdings_handler,
@@ -298,3 +302,15 @@ def test_agent_runtime_model_api_failure() -> None:
     runtime = _build_test_runtime(FailingModel())
     response = runtime.run("Olá")
     assert "falha ao comunicar com o modelo de ia" in response.lower()
+
+
+def test_runtime_provider_failure_is_safe(caplog) -> None:
+    class FailingProvider(FakeAgentModel):
+        def generate_reply(self, messages, tools=None):
+            original = RuntimeError("403 private-financial-payload token=secret-value")
+            raise ProviderError(classify_provider_exception(original), original)
+
+    response = _build_test_runtime(FailingProvider()).run("Minha carteira")
+    assert "falha ao comunicar com o modelo de IA" in response
+    assert "secret-value" not in response + caplog.text
+    assert "private-financial-payload" not in response + caplog.text
