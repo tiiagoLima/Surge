@@ -69,6 +69,15 @@ O Surge implementa o bounded context `src/agent/` para orquestrar conversação 
 - **Somente Leitura e Privacidade:** Nesta primeira etapa, apenas a ferramenta `get_portfolio_holdings` é disponibilizada (estritamente leitura). Não há acesso a shell, arquivos, código ou escrita. Os dados estritamente necessários da carteira são transmitidos ao provedor do modelo para compor a resposta, e o payload financeiro nunca é exposto em logs.
 - **Estratégia de Testes Sem Mocks de Framework:** Testes de domínio, aplicação e ferramentas utilizam fakes explícitos em memória (como `FakePortfolioUseCase` e `FakeAgentModel`), reservando doubles do SDK externo exclusivamente para os testes de adapters.
 
+### ADR-0013 — Independência Operacional do LLM e Requisitos de Capacidades
+O LLM é uma capacidade opcional de inteligência e enriquecimento, não uma dependência universal do núcleo determinístico. O domínio `src/agent/domain/capabilities.py` usa somente a biblioteca padrão e separa **Demanda** (`CapabilityRequirements`) de **Oferta** (`RuntimeAvailability`), ambas imutáveis e com dimensões `llm`, `network` e `storage`. A demanda aceita exclusivamente membros de `RequirementLevel` (`StrEnum`): `REQUIRED` (`required`) impede execução quando ausente; `OPTIONAL` (`optional`) permite execução degradada quando ausente; `NOT_REQUIRED` (`not_required`, padrão) não exige o recurso. A oferta aceita apenas booleanos, falsos por padrão. Definições exigem IDs não vazios e requisitos tipados; o registro puro rejeita duplicatas e não faz I/O.
+
+`is_eligible` verifica apenas os recursos `REQUIRED`; `is_fully_supported` verifica os `REQUIRED` e `OPTIONAL`. Ambos lançam `KeyError` para IDs desconhecidos. O futuro Execution Coordinator (Issue #18) usará essas consultas para direcionar modo pleno versus modo degradado; não é implementado nesta etapa, que não adiciona gates nem altera fluxos existentes.
+
+O composition root declara armazenamento `REQUIRED` para `portfolio.get_holdings` e `memory.manage`; rede e armazenamento `REQUIRED` para `portfolio.manage`, pois a inclusão valida o ticker por cotação; e todos os recursos `REQUIRED` para `agent.ask`. `investment.scan_portfolio` exige rede e armazenamento, com LLM `OPTIONAL`: o `ScanPortfolioUseCase` é o paradigma de degradação graciosa, mantendo regras determinísticas sem enriquecimento por LLM. Sem LLM é elegível mas não plenamente suportado; com todos os recursos é plenamente suportado; sem rede é inelegível.
+
+Construir o registro não lê configuração nem constrói o runtime do agente. `get_runtime_capabilities()` retorna `RuntimeAvailability` usando `bool(settings.gemini_api_key)` para LLM e assumindo rede e armazenamento disponíveis; não verifica conectividade, validade da credencial ou saúde de serviços. As declarações não substituem validações próprias dos casos de uso.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```

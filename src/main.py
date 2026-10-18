@@ -17,6 +17,13 @@ from src.agent.adapters.tools.portfolio_tools import (
 )
 from src.agent.application.agent_runtime import AgentRuntime
 from src.agent.application.tool_registry import ToolRegistry
+from src.agent.domain.capabilities import (
+    CapabilityDefinition,
+    CapabilityRegistry,
+    CapabilityRequirements,
+    RequirementLevel,
+    RuntimeAvailability,
+)
 from src.finances.adapters.inbound.telegram_bot_adapter import TelegramFinanceBotAdapter
 from src.finances.adapters.outbound.sqlite_repository import FinanceSqliteRepository
 from src.finances.application.manage_budget_use_case import (
@@ -48,6 +55,52 @@ from src.memory.application.search_semantic_memory_use_case import SearchSemanti
 from src.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def build_capability_registry() -> CapabilityRegistry:
+    """Declare base capabilities without settings, adapters or an LLM runtime."""
+    registry = CapabilityRegistry()
+    for capability_id in ("portfolio.get_holdings", "memory.manage"):
+        registry.register(
+            CapabilityDefinition(
+                capability_id, CapabilityRequirements(storage=RequirementLevel.REQUIRED)
+            )
+        )
+    registry.register(
+        CapabilityDefinition(
+            "portfolio.manage",
+            CapabilityRequirements(
+                network=RequirementLevel.REQUIRED, storage=RequirementLevel.REQUIRED
+            ),
+        )
+    )
+    registry.register(
+        CapabilityDefinition(
+            "investment.scan_portfolio",
+            CapabilityRequirements(
+                llm=RequirementLevel.OPTIONAL,
+                network=RequirementLevel.REQUIRED,
+                storage=RequirementLevel.REQUIRED,
+            ),
+        )
+    )
+    registry.register(
+        CapabilityDefinition(
+            "agent.ask",
+            CapabilityRequirements(
+                llm=RequirementLevel.REQUIRED,
+                network=RequirementLevel.REQUIRED,
+                storage=RequirementLevel.REQUIRED,
+            ),
+        )
+    )
+    return registry
+
+
+def get_runtime_capabilities() -> RuntimeAvailability:
+    """Declare configured resources without probing provider or service health."""
+    settings = get_settings()
+    return RuntimeAvailability(llm=bool(settings.gemini_api_key), network=True, storage=True)
 
 
 def _build_ports():
