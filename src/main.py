@@ -54,13 +54,16 @@ from src.memory.application.manage_memory_use_case import ManageMemoryUseCase
 from src.memory.application.save_preference_use_case import SavePreferenceUseCase
 from src.memory.application.search_semantic_memory_use_case import SearchSemanticMemoryUseCase
 from src.shared.config import get_settings
+from src.shared.database.migrations import provision_database
 
 logger = logging.getLogger(__name__)
 
 
 def build_execution_record_repository() -> SqliteExecutionRepository:
     """Build the execution lifecycle repository without integrating a coordinator."""
-    return SqliteExecutionRepository(db_path=get_settings().db_path)
+    settings = get_settings()
+    provision_database(settings.db_path)
+    return SqliteExecutionRepository(db_path=settings.db_path)
 
 
 def build_capability_registry() -> CapabilityRegistry:
@@ -112,6 +115,7 @@ def get_runtime_capabilities() -> RuntimeAvailability:
 def _build_ports():
     """Build all adapters. Returns ports tuple."""
     settings = get_settings()
+    provision_database(settings.db_path)
     yf = YFinanceAdapter()
     brapi = BrapiAdapter(base_url=settings.brapi_base_url, token=settings.brapi_token or None)
     quote_port = CompositeQuoteAdapter(primary=yf, fallback=brapi)
@@ -149,6 +153,7 @@ def _build_ports():
 def build_register_expense_use_case() -> RegisterExpenseUseCase:
     """Build the finance expense registration use case."""
     settings = get_settings()
+    provision_database(settings.db_path)
     repository = FinanceSqliteRepository(db_path=settings.db_path)
     return RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
 
@@ -156,6 +161,7 @@ def build_register_expense_use_case() -> RegisterExpenseUseCase:
 def build_set_budget_use_case() -> SetBudgetUseCase:
     """Build the finance set budget use case."""
     settings = get_settings()
+    provision_database(settings.db_path)
     repository = FinanceSqliteRepository(db_path=settings.db_path)
     return SetBudgetUseCase(budget_port=repository)
 
@@ -163,6 +169,7 @@ def build_set_budget_use_case() -> SetBudgetUseCase:
 def build_get_monthly_summary_use_case() -> GetMonthlySummaryUseCase:
     """Build the finance monthly summary use case."""
     settings = get_settings()
+    provision_database(settings.db_path)
     repository = FinanceSqliteRepository(db_path=settings.db_path)
     return GetMonthlySummaryUseCase(transaction_port=repository, budget_port=repository)
 
@@ -170,6 +177,7 @@ def build_get_monthly_summary_use_case() -> GetMonthlySummaryUseCase:
 def build_telegram_finance_bot_adapter() -> TelegramFinanceBotAdapter:
     """Build the Telegram Finance Bot inbound adapter."""
     settings = get_settings()
+    provision_database(settings.db_path)
     repository = FinanceSqliteRepository(db_path=settings.db_path)
     register_uc = RegisterExpenseUseCase(transaction_port=repository, budget_port=repository)
     set_budget_uc = SetBudgetUseCase(budget_port=repository)
@@ -196,6 +204,7 @@ def build_market_analyst_port():
 def build_memory_repository() -> SqliteMemoryRepository:
     """Build the persistent SQLite memory repository."""
     settings = get_settings()
+    provision_database(settings.db_path)
     return SqliteMemoryRepository(db_path=settings.db_path)
 
 

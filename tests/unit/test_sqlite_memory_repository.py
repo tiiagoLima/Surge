@@ -4,10 +4,21 @@ from pathlib import Path
 
 from src.memory.adapters.outbound.sqlite_memory_repository import SqliteMemoryRepository
 from src.memory.domain.models import MemoryEntry
+from src.shared.database.migrations import create_memory_database
+
+
+def _repository(db_path: str | Path = ":memory:") -> SqliteMemoryRepository:
+    if db_path == ":memory:":
+        _, connection = create_memory_database()
+        return SqliteMemoryRepository(db_path, connection=connection)
+    from src.shared.database.migrations import provision_database
+
+    provision_database(db_path)
+    return SqliteMemoryRepository(db_path)
 
 
 def test_sqlite_memory_repository_in_memory_crud() -> None:
-    repo = SqliteMemoryRepository(db_path=":memory:")
+    repo = _repository()
 
     entry = MemoryEntry.create(
         "Prefiro setores perenes como energia elétrica e saneamento",
@@ -42,7 +53,7 @@ def test_sqlite_memory_repository_persists_across_restarts(tmp_path: Path) -> No
     db_file = tmp_path / "test_persistence.db"
 
     # Session 1: save memories and simulate process exit
-    repo_session_1 = SqliteMemoryRepository(db_path=db_file)
+    repo_session_1 = _repository(db_file)
     e1 = MemoryEntry.create(
         "Foco em valuation pelo método de Graham",
         category="valuation",
@@ -58,7 +69,7 @@ def test_sqlite_memory_repository_persists_across_restarts(tmp_path: Path) -> No
     del repo_session_1
 
     # Session 2: open new repository instance on same file path (simulates restart)
-    repo_session_2 = SqliteMemoryRepository(db_path=db_file)
+    repo_session_2 = _repository(db_file)
 
     # Check that entries survived
     recovered_e1 = repo_session_2.get_by_id(e1.id)

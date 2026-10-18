@@ -6,6 +6,7 @@ from src.agent.adapters.outbound.sqlite_execution_repository import SqliteExecut
 from src.agent.domain.capabilities import CapabilityRequirements, RequirementLevel
 from src.agent.domain.executions import ExecutionRecord
 from src.agent.domain.provider_health import ProviderFailure, ProviderFailureKind
+from src.shared.database.migrations import create_memory_database, provision_database
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 
@@ -35,6 +36,7 @@ def _record(execution_id: str = "exec-1") -> ExecutionRecord:
 
 def test_round_trip_failure_and_tri_state_requirements(tmp_path) -> None:
     path = tmp_path / "executions.db"
+    provision_database(path)
     repository = SqliteExecutionRepository(path)
     record = _record()
     repository.save(record)
@@ -47,7 +49,9 @@ def test_round_trip_failure_and_tri_state_requirements(tmp_path) -> None:
 
 
 def test_upsert_replaces_same_id_and_null_failure(tmp_path) -> None:
-    repository = SqliteExecutionRepository(tmp_path / "executions.db")
+    path = tmp_path / "executions.db"
+    provision_database(path)
+    repository = SqliteExecutionRepository(path)
     record = _record("same-id")
     repository.save(record)
     succeeded = (
@@ -68,6 +72,7 @@ def test_upsert_replaces_same_id_and_null_failure(tmp_path) -> None:
 
 def test_reopen_and_idempotent_ddl(tmp_path) -> None:
     path = tmp_path / "executions.db"
+    provision_database(path)
     first = SqliteExecutionRepository(path)
     first.save(_record())
     second = SqliteExecutionRepository(path)
@@ -75,16 +80,20 @@ def test_reopen_and_idempotent_ddl(tmp_path) -> None:
 
 
 def test_memory_database_keeps_anchor_and_isolated_instances() -> None:
-    repository = SqliteExecutionRepository(":memory:")
+    _, connection = create_memory_database()
+    repository = SqliteExecutionRepository(":memory:", connection=connection)
     record = _record()
     repository.save(record)
     assert repository.get_by_id(record.id) == record
-    other = SqliteExecutionRepository(":memory:")
+    _, other_connection = create_memory_database()
+    other = SqliteExecutionRepository(":memory:", connection=other_connection)
     assert other.get_by_id(record.id) is None
 
 
 def test_sensitive_fields_are_not_stored(tmp_path) -> None:
     path = tmp_path / "executions.db"
+    provision_database(path)
+    provision_database(path)
     repository = SqliteExecutionRepository(path)
     repository.save(_record())
     raw = path.read_bytes()

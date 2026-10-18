@@ -4,6 +4,12 @@ from datetime import UTC, datetime
 
 from src.investments.adapters.outbound.sqlite_repository import SqliteRepository
 from src.investments.domain.models import Holding
+from src.shared.database.migrations import create_memory_database
+
+
+def _repo() -> SqliteRepository:
+    _, connection = create_memory_database()
+    return SqliteRepository(db_path=":memory:", connection=connection)
 
 
 def _holding(ticker: str = "PETR4.SA", qty: float = 100, avg: float | None = 28.5) -> Holding:
@@ -17,7 +23,7 @@ def _holding(ticker: str = "PETR4.SA", qty: float = 100, avg: float | None = 28.
 
 
 def test_save_and_get_holding():
-    repo = SqliteRepository(db_path=":memory:")
+    repo = _repo()
     repo.save_holding(_holding("PETR4.SA", 100, 28.5))
     h = repo.get_holding("petr4.sa")  # case-insensitive
     assert h is not None
@@ -28,7 +34,7 @@ def test_save_and_get_holding():
 
 
 def test_list_holdings_ordered():
-    repo = SqliteRepository(db_path=":memory:")
+    repo = _repo()
     repo.save_holding(_holding("VALE3.SA"))
     repo.save_holding(_holding("PETR4.SA"))
     repo.save_holding(_holding("AAPL"))
@@ -37,7 +43,7 @@ def test_list_holdings_ordered():
 
 
 def test_upsert_updates_quantity():
-    repo = SqliteRepository(db_path=":memory:")
+    repo = _repo()
     repo.save_holding(_holding("PETR4.SA", 100, 28.5))
     repo.save_holding(_holding("PETR4.SA", 150, 30.0))
     h = repo.get_holding("PETR4.SA")
@@ -48,7 +54,7 @@ def test_upsert_updates_quantity():
 
 
 def test_remove_holding():
-    repo = SqliteRepository(db_path=":memory:")
+    repo = _repo()
     repo.save_holding(_holding("PETR4.SA"))
     assert repo.remove_holding("PETR4.SA") is True
     assert repo.get_holding("PETR4.SA") is None
@@ -57,6 +63,6 @@ def test_remove_holding():
 
 
 def test_get_missing_returns_none():
-    repo = SqliteRepository(db_path=":memory:")
+    repo = _repo()
     assert repo.get_holding("UNKNOWN") is None
     assert repo.list_holdings() == []
