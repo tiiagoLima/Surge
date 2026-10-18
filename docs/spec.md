@@ -103,6 +103,15 @@ Provisionamento é explícito: `provision_database(path)` executa `upgrade head`
 
 Comandos operacionais: `alembic upgrade head` (banco novo/provisionado), `alembic current`, `alembic history`, `alembic downgrade -1` (somente recuperação/testes) e as APIs explícitas em `src/shared/database/migrations.py`. O manifesto é deliberadamente conservador: colunas ou índices adicionais em legado não são apagados automaticamente, mas divergências da baseline requerida não podem ser stampadas.
 
+### ADR-0017 — Coordenador de Execução e Estado Operacional
+O `ExecutionCoordinator` em `src/agent/application/execution_coordinator.py` coordena uma capacidade por vez usando apenas `CapabilityRegistry`, `RuntimeAvailability`, `ProviderHealth`, `ExecutionRecord` e `ExecutionRecordPort`. A operação é fornecida pelo composition root/caller como callable; o coordenador não importa use cases, adapters, Gemini, scanner, scheduler ou ToolRegistry.
+
+A elegibilidade considera somente recursos `REQUIRED`; `is_fully_supported` continua sendo uma indicação separada de suporte completo. LLM configurado não significa saudável: capacidades cognitivas com LLM `REQUIRED` só iniciam quando a disponibilidade existe e a saúde observada é `AVAILABLE`. Sem modelo ou com saúde não disponível, a operação não é chamada e o registro percorre `PENDING → RUNNING → WAITING_FOR_MODEL` com `ProviderFailure` retentável e mensagem neutra. LLM `OPTIONAL` pode executar sem modelo em modo `DEGRADED`. Rede ou storage `REQUIRED` ausentes falham antes da operação.
+
+Cada execução é isolada: uma exceção ou falha de persistência não interrompe a próxima. O coordinator tenta persistir cada estágio (`PENDING`, `RUNNING` e terminal); quando storage falha, retorna o estado em memória e marca o resumo de sucesso como não durável, sem fingir durabilidade. Não há retry, worker de espera, fallback entre providers ou nova política de scheduler nesta etapa.
+
+`OperationalState` é um value object imutável, derivado de disponibilidade e saúde em memória, com `NORMAL` ou `DEGRADED`, saúde opcional e razões neutras. Ausência de LLM, rede, storage, saúde não observada ou saúde `DEGRADED`/`UNAVAILABLE` tornam o estado degradado; o objeto não é persistido. Falhas de recursos obrigatórios aparecem no resultado da execução, enquanto a operação nunca é chamada quando inelegível.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```
