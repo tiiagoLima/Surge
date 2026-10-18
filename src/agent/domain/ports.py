@@ -6,9 +6,22 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
+from src.agent.domain.executions import ExecutionRecord
 from src.agent.domain.models import AgentMessage, ToolDefinition
 
 ToolHandler = Callable[[dict[str, Any]], str]
+
+
+class ExecutionRecordPort(ABC):
+    """Port for storing and retrieving execution lifecycle records."""
+
+    @abstractmethod
+    def save(self, record: ExecutionRecord) -> None:
+        """Persist or update an execution record."""
+
+    @abstractmethod
+    def get_by_id(self, execution_id: str) -> ExecutionRecord | None:
+        """Retrieve an execution record by stable ID."""
 
 
 class AgentModelPort(ABC):
