@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -14,56 +13,26 @@ from src.agent.domain.provider_health import ProviderFailure, ProviderFailureKin
 
 
 class SqliteExecutionRepository(ExecutionRecordPort):
-    """Persist immutable execution snapshots with idempotent SQLite DDL."""
+    """Persist immutable execution snapshots in an explicitly provisioned SQLite database."""
 
-    def __init__(self, db_path: str | Path = "./surge.db") -> None:
-        self._memory_conn: sqlite3.Connection | None = None
-        if isinstance(db_path, str) and db_path == ":memory:":
-            self._db_path: str | Path = (
-                f"file:mem_execution_{uuid.uuid4().hex}?mode=memory&cache=shared"
-            )
-            self._is_memory = True
-            self._memory_conn = self._connect()
-        else:
-            self._db_path = Path(db_path).expanduser().resolve()
-            self._is_memory = False
-            self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+    def __init__(
+        self, db_path: str | Path = "./surge.db", connection: sqlite3.Connection | None = None
+    ) -> None:
+        if db_path == ":memory:" and connection is None:
+            raise ValueError("Use create_memory_database and pass its connection explicitly")
+        self._db_path = Path(db_path).expanduser().resolve()
+        self._connection = connection
+        self._is_memory = connection is not None
 
     def _connect(self) -> sqlite3.Connection:
+        if self._connection is not None:
+            return self._connection
         if self._is_memory:
             conn = sqlite3.connect(str(self._db_path), uri=True, timeout=10)
         else:
             conn = sqlite3.connect(str(self._db_path), timeout=10)
         conn.row_factory = sqlite3.Row
         return conn
-
-    def _init_db(self) -> None:
-        with self._connect() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS execution_records (
-                    id TEXT PRIMARY KEY,
-                    capability_id TEXT NOT NULL,
-                    trigger TEXT NOT NULL,
-                    req_llm TEXT NOT NULL,
-                    req_network TEXT NOT NULL,
-                    req_storage TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    started_at TEXT,
-                    finished_at TEXT,
-                    status TEXT NOT NULL,
-                    failure_kind TEXT,
-                    failure_message TEXT,
-                    failure_retryable INTEGER,
-                    result_summary TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_execution_capability
-                    ON execution_records(capability_id);
-                CREATE INDEX IF NOT EXISTS idx_execution_status
-                    ON execution_records(status);
-                CREATE INDEX IF NOT EXISTS idx_execution_created
-                    ON execution_records(created_at);
-                """)
 
     def save(self, record: ExecutionRecord) -> None:
         """Upsert a validated execution record."""

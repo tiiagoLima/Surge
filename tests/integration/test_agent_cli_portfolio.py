@@ -14,6 +14,7 @@ from src.agent.domain.models import AgentMessage, ToolCall
 from src.investments.adapters.outbound.sqlite_repository import SqliteRepository
 from src.investments.domain.models import Holding, Quote
 from src.investments.domain.ports import QuotePort
+from src.shared.database.migrations import provision_database
 
 
 class NoQuoteAccess(QuotePort):
@@ -71,6 +72,7 @@ def test_ask_reads_sqlite_portfolio_through_runtime(
     expected_by_currency: dict[str, float],
 ) -> None:
     db_path = tmp_path / "portfolio.db"
+    provision_database(db_path)
     seed_repository = SqliteRepository(db_path)
     for holding in holdings:
         seed_repository.save_holding(holding)

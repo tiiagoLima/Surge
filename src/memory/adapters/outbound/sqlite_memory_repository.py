@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -17,29 +16,20 @@ logger = logging.getLogger(__name__)
 class SqliteMemoryRepository(MemoryStoragePort):
     """Persists and retrieves structured memories and preferences using SQLite."""
 
-    def __init__(self, db_path: str | Path = "./surge.db") -> None:
-        """Initialize repository with target SQLite file path or in-memory database."""
-        self._memory_conn: sqlite3.Connection | None = None
-        if isinstance(db_path, str) and db_path == ":memory:":
-            mem_id = uuid.uuid4().hex
-            self._db_path: str | Path = f"file:mem_memory_{mem_id}?mode=memory&cache=shared"
-            self._is_memory = True
-            self._memory_conn = sqlite3.connect(str(self._db_path), uri=True, timeout=10)
-            self._memory_conn.row_factory = sqlite3.Row
-        else:
-            self._db_path = Path(db_path).expanduser().resolve()
-            self._is_memory = False
-            self._memory_conn = None
-            try:
-                self._db_path.parent.mkdir(parents=True, exist_ok=True)
-            except PermissionError:
-                self._db_path = Path("/tmp") / self._db_path.name
-                self._db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        self._init_db()
+    def __init__(
+        self, db_path: str | Path = "./surge.db", connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Initialize repository against an explicitly provisioned database."""
+        if db_path == ":memory:" and connection is None:
+            raise ValueError("Use create_memory_database and pass its connection explicitly")
+        self._db_path = Path(db_path).expanduser().resolve()
+        self._connection = connection
+        self._is_memory = connection is not None
 
     def _connect(self) -> sqlite3.Connection:
         """Create or return an SQLite connection."""
+        if self._connection is not None:
+            return self._connection
         if self._is_memory:
             conn = sqlite3.connect(str(self._db_path), uri=True, timeout=10)
             conn.row_factory = sqlite3.Row
@@ -47,24 +37,6 @@ class SqliteMemoryRepository(MemoryStoragePort):
         conn = sqlite3.connect(str(self._db_path), timeout=10)
         conn.row_factory = sqlite3.Row
         return conn
-
-    def _init_db(self) -> None:
-        """Create memory table and indexes idempotently."""
-        with self._connect() as conn:
-            conn.executescript("""
-                CREATE TABLE IF NOT EXISTS memory_entries (
-                    id TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_memory_user_category
-                    ON memory_entries(user_id, category);
-                CREATE INDEX IF NOT EXISTS idx_memory_user_created
-                    ON memory_entries(user_id, created_at);
-            """)
 
     def save(self, entry: MemoryEntry) -> None:
         """Persist or update a memory entry in SQLite."""

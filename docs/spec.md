@@ -94,6 +94,15 @@ Somente `ProviderFailure` normalizada é persistida; saúde do provedor continua
 
 A construção do repositório é disponibilizada no composition root, mas SURGE-003 não integra runtime, coordinator, Gemini, scanner, scheduler, retries ou qualquer novo gate de execução. Orquestração, políticas de retry e uso futuro do ciclo permanecem fora do escopo.
 
+### ADR-0016 — Migrations explícitas versionadas com Alembic e SQLAlchemy Core
+O schema SQLite compartilhado pelos contextos é evoluído por migrations versionadas em `migrations/`, usando Alembic e SQLAlchemy Core (sem ORM e sem PostgreSQL). A revisão `0001_baseline` reproduz apenas as tabelas, índices e constraints observados nos quatro repositories; `0002_schema_metadata` é uma evolução incremental não destrutiva usada para validar upgrade e preservação de dados. Os repositories executam somente DML e não criam schema durante operações normais.
+
+Provisionamento é explícito: `provision_database(path)` executa `upgrade head`; o startup não faz upgrade implícito nem destrutivo. Bancos legados devem ser copiados antes da operação, inspecionados e comparados ao manifesto de tabelas/colunas/índices. `stamp_legacy_database(path, backup_path=...)` só aceita equivalência e ação explícita; divergência falha sem stamp. O backup é o ponto de recuperação antes do stamp/migration, e falhas de migration devem ser tratadas restaurando a cópia e corrigindo a divergência.
+
+`:memory:` e fixtures usam `create_memory_database()`, que mantém uma âncora compartilhada e aplica as mesmas revisões Alembic em uma conexão SQLAlchemy/SQLite. O retorno da conexão deve ser passado explicitamente aos repositories; `:memory:` sem conexão provisionada é rejeitado. O path normal continua sendo `Settings.db_path` (padrão `./surge.db`), mas nenhuma factory de runtime realiza migração automaticamente. SQLite foi mantido pelo escopo local/offline e SQLAlchemy Core/Alembic fornecem versionamento, transações e portabilidade de DDL sem introduzir ORM; PostgreSQL, novas tabelas de domínio, coordinator, LLM e mudanças de deploy estão fora desta revisão.
+
+Comandos operacionais: `alembic upgrade head` (banco novo/provisionado), `alembic current`, `alembic history`, `alembic downgrade -1` (somente recuperação/testes) e as APIs explícitas em `src/shared/database/migrations.py`. O manifesto é deliberadamente conservador: colunas ou índices adicionais em legado não são apagados automaticamente, mas divergências da baseline requerida não podem ser stampadas.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```

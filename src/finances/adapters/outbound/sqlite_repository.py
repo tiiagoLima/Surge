@@ -18,14 +18,14 @@ from src.finances.domain.ports import BudgetPort, TransactionPort
 class FinanceSqliteRepository(TransactionPort, BudgetPort):
     """Persist finance transactions and budgets in SQLite."""
 
-    def __init__(self, db_path: str | Path = "./surge.db") -> None:
-        """Initialize the repository and create its tables."""
+    def __init__(
+        self, db_path: str | Path = "./surge.db", connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Initialize a repository against an explicitly provisioned database."""
+        if db_path == ":memory:" and connection is None:
+            raise ValueError("Use create_memory_database and pass its connection explicitly")
         self._db_path = str(db_path)
-        self._memory_connection: sqlite3.Connection | None = None
-        if self._db_path == ":memory:":
-            self._memory_connection = sqlite3.connect(":memory:")
-            self._memory_connection.row_factory = sqlite3.Row
-        self._init_db()
+        self._memory_connection = connection
 
     def _connect(self) -> sqlite3.Connection:
         """Open a connection with rows accessible by column name."""
@@ -34,28 +34,6 @@ class FinanceSqliteRepository(TransactionPort, BudgetPort):
         connection = sqlite3.connect(self._db_path)
         connection.row_factory = sqlite3.Row
         return connection
-
-    def _init_db(self) -> None:
-        """Create finance tables when they do not exist."""
-        with self._connect() as connection:
-            connection.executescript("""
-                CREATE TABLE IF NOT EXISTS finance_transactions (
-                    id TEXT PRIMARY KEY,
-                    amount REAL NOT NULL,
-                    category TEXT NOT NULL,
-                    transaction_type TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS idx_finance_transactions_category_date
-                    ON finance_transactions(category, created_at);
-                CREATE TABLE IF NOT EXISTS finance_budgets (
-                    category TEXT NOT NULL,
-                    allocated_amount REAL NOT NULL,
-                    month TEXT NOT NULL,
-                    PRIMARY KEY (category, month)
-                );
-                """)
 
     def save(self, transaction: Transaction) -> None:
         """Persist a transaction."""

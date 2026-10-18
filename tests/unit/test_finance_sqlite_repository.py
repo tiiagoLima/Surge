@@ -4,10 +4,16 @@ from datetime import UTC, datetime
 
 from src.finances.adapters.outbound.sqlite_repository import FinanceSqliteRepository
 from src.finances.domain.models import CategoryBudget, ExpenseCategory, Transaction, TransactionType
+from src.shared.database.migrations import create_memory_database
+
+
+def _repository() -> FinanceSqliteRepository:
+    _, connection = create_memory_database()
+    return FinanceSqliteRepository(":memory:", connection=connection)
 
 
 def test_repository_persists_transactions_and_calculates_monthly_spending() -> None:
-    repository = FinanceSqliteRepository(":memory:")
+    repository = _repository()
     repository.save(
         Transaction(
             id="expense-1",
@@ -36,7 +42,7 @@ def test_repository_persists_transactions_and_calculates_monthly_spending() -> N
 
 
 def test_repository_persists_and_retrieves_budget() -> None:
-    repository = FinanceSqliteRepository(":memory:")
+    repository = _repository()
     budget = CategoryBudget(ExpenseCategory.LEISURE, 500.0, "2026-10")
 
     repository.save_budget(budget)

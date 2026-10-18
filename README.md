@@ -53,6 +53,10 @@ surge memory remove <ID>
 
 # 9. Conversar com o Surge Assistant via CLI (Tool Calling)
 surge ask "Quais ativos eu tenho na minha carteira?"
+
+# 10. Provisionar/evoluir explicitamente o SQLite
+alembic upgrade head
+alembic current
 ```
 
 ## Bot Interativo no Telegram (Finanças e Carteira)
