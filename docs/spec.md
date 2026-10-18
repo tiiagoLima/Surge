@@ -87,6 +87,13 @@ Os adapters Gemini começam `UNAVAILABLE` sem chave e `DEGRADED` com chave ainda
 
 `GeminiAnalystAdapter` observa a mesma saúde, mas mantém exatamente o fallback `Insight indisponível devido a erro na API de análise.` e não propaga falhas de análise ao `ScanPortfolioUseCase`. O scanner continua calculando, persistindo e notificando oportunidades deterministicamente, sem depender da saúde do LLM. Nenhuma dependência, modelo configurado, schema de banco ou estratégia de deploy é alterada.
 
+### ADR-0015 — Ciclo de Vida de Execuções e Persistência de Falhas Normalizadas
+O domínio `src/agent/domain/executions.py` modela execuções como registros imutáveis com ID estável, capacidade, trigger, snapshot tri-state de requisitos, timestamps UTC coerentes, estado e resumo mínimo. A máquina permite `PENDING → RUNNING`; `RUNNING → SUCCEEDED | FAILED | WAITING_FOR_MODEL`; e `WAITING_FOR_MODEL → RUNNING | FAILED`. Estados terminais não transitam. `WAITING_FOR_MODEL` exige falha retentável e demanda de LLM diferente de `NOT_REQUIRED`.
+
+Somente `ProviderFailure` normalizada é persistida; saúde do provedor continua volátil em memória e não é armazenada junto do registro. O repositório SQLite reidrata e revalida enums, timestamps, requisitos e falhas. Não são persistidos exception/SDK, credenciais, prompts, payloads ou tracebacks; `result_summary` é curto e rejeita termos de detalhe sensível. O armazenamento tem DDL idempotente, upsert por ID, índices e suporte a arquivo e `:memory:` com âncora.
+
+A construção do repositório é disponibilizada no composition root, mas SURGE-003 não integra runtime, coordinator, Gemini, scanner, scheduler, retries ou qualquer novo gate de execução. Orquestração, políticas de retry e uso futuro do ciclo permanecem fora do escopo.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```

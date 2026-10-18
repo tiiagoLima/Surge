@@ -11,6 +11,7 @@ import logging
 import sys
 
 from src.agent.adapters.outbound.gemini_agent_model import GeminiAgentModel
+from src.agent.adapters.outbound.sqlite_execution_repository import SqliteExecutionRepository
 from src.agent.adapters.tools.portfolio_tools import (
     GET_PORTFOLIO_HOLDINGS_TOOL,
     make_get_portfolio_holdings_handler,
@@ -55,6 +56,11 @@ from src.memory.application.search_semantic_memory_use_case import SearchSemanti
 from src.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def build_execution_record_repository() -> SqliteExecutionRepository:
+    """Build the execution lifecycle repository without integrating a coordinator."""
+    return SqliteExecutionRepository(db_path=get_settings().db_path)
 
 
 def build_capability_registry() -> CapabilityRegistry:
