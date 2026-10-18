@@ -6,6 +6,12 @@ import importlib
 import logging
 from typing import Any
 
+from src.agent.adapters.outbound.provider_failure_classifier import classify_provider_exception
+from src.agent.domain.provider_health import (
+    ProviderHealth,
+    ProviderHealthPort,
+    ProviderHealthStatus,
+)
 from src.investments.domain.models import Opportunity
 from src.investments.domain.ports import MarketAnalystPort
 
@@ -17,7 +23,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class GeminiAnalystAdapter(MarketAnalystPort):
+class GeminiAnalystAdapter(MarketAnalystPort, ProviderHealthPort):
     """Analyzes market opportunities using Google Gemini.
 
     Implements MarketAnalystPort. Encapsulates the system prompt and
@@ -31,16 +37,52 @@ class GeminiAnalystAdapter(MarketAnalystPort):
             api_key: The SURGE_GEMINI_API_KEY environment variable value.
             model: The Gemini model name (default: gemini-2.5-flash).
         """
-        self._api_key = api_key
+        self._api_key = str(api_key).strip()
         self._model = model
         self._client: Any = None
         self._initialized = False
+        self._health = ProviderHealth(
+            "gemini",
+            self._model,
+            ProviderHealthStatus.DEGRADED if self._api_key else ProviderHealthStatus.UNAVAILABLE,
+        )
+
+    def get_health(self) -> ProviderHealth:
+        """Return cached health without I/O."""
+        return self._health
+
+    def _record_failure(self, exc: Exception) -> None:
+        failure = classify_provider_exception(exc, "gemini", self._model)
+        self._health = ProviderHealth(
+            "gemini",
+            self._model,
+            (
+                ProviderHealthStatus.DEGRADED
+                if failure.retryable
+                else ProviderHealthStatus.UNAVAILABLE
+            ),
+            failure,
+        )
+        logger.warning("Gemini analyst: %s", failure.message)
+
+    def check_health(self) -> ProviderHealth:
+        """Explicitly probe model metadata without requesting analysis."""
+        try:
+            self._ensure_initialized()
+            self._client.models.get(model=self._model)
+        except Exception as exc:
+            self._record_failure(exc)
+        else:
+            self._health = ProviderHealth("gemini", self._model, ProviderHealthStatus.AVAILABLE)
+        return self._health
 
     def _ensure_initialized(self) -> None:
+        if not self._api_key:
+            raise ValueError("SURGE_GEMINI_API_KEY não configurada no ambiente.")
         if self._initialized:
             return
         if genai is None:
-            return
+            raise RuntimeError("Biblioteca 'google-genai' não está disponível no ambiente.")
         self._client = genai.Client(api_key=self._api_key)
         self._initialized = True
 
@@ -53,13 +95,10 @@ class GeminiAnalystAdapter(MarketAnalystPort):
         Returns:
             The model's response string, or a default fallback on any error.
         """
-        if not self._api_key:
-            return "Insight indisponível devido a erro na API de análise."
-
         try:
             self._ensure_initialized()
             if self._client is None:
-                return "Insight indisponível devido a erro na API de análise."
+                raise RuntimeError("Cliente do provedor indisponível.")
 
             ticker = opportunity.ticker
             prompt = (
@@ -71,11 +110,10 @@ class GeminiAnalystAdapter(MarketAnalystPort):
 
             response = self._client.models.generate_content(model=self._model, contents=prompt)
             text = (response.text or "").strip()
+            self._health = ProviderHealth("gemini", self._model, ProviderHealthStatus.AVAILABLE)
             if text:
                 return text
             return "Insight indisponível devido a erro na API de análise."
-        except Exception:
-            logger.exception(
-                "Gemini API call failed for ticker %s", getattr(opportunity, "ticker", "unknown")
-            )
+        except Exception as exc:
+            self._record_failure(exc)
             return "Insight indisponível devido a erro na API de análise."

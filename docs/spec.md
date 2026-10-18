@@ -78,6 +78,15 @@ O composition root declara armazenamento `REQUIRED` para `portfolio.get_holdings
 
 Construir o registro não lê configuração nem constrói o runtime do agente. `get_runtime_capabilities()` retorna `RuntimeAvailability` usando `bool(settings.gemini_api_key)` para LLM e assumindo rede e armazenamento disponíveis; não verifica conectividade, validade da credencial ou saúde de serviços. As declarações não substituem validações próprias dos casos de uso.
 
+### ADR-0014 — Falhas Normalizadas e Saúde Observável dos Provedores LLM
+O domínio puro `src/agent/domain/provider_health.py` declara falhas e snapshots imutáveis de saúde, sem dependência de SDK. As categorias são `AUTHENTICATION`, `CONFIGURATION`, `RATE_LIMIT`, `TEMPORARY_UNAVAILABLE`, `TIMEOUT`, `INVALID_REQUEST`, `PERMANENT` (reservada para falhas permanentes explícitas) e `UNKNOWN`. O classificador da borda traduz códigos HTTP/status simbólicos e timeouts; falhas desconhecidas não são consideradas retentáveis. A indicação `retryable` é informativa: não há retry automático nesta etapa.
+
+Os adapters Gemini começam `UNAVAILABLE` sem chave e `DEGRADED` com chave ainda não verificada. Sucesso de geração ou probe leva a `AVAILABLE`, limpando a falha anterior; falha retentável leva a `DEGRADED`, e não retentável a `UNAVAILABLE`. `get_health()` apenas retorna o snapshot em memória; `check_health()` é um probe explícito via `client.models.get(model=...)`, sem geração de conteúdo. Saúde observada não garante sucesso futuro, não altera configuração e não adiciona probes ao scanner ou à inicialização.
+
+`GeminiAgentModel` encapsula falhas em `ProviderError`, preservando a exceção original apenas para diagnóstico explícito. Logs e mensagens normalizadas usam textos fixos seguros, nunca payloads do SDK, credenciais, prompts ou traceback. O sanitizador na borda mascara formatos comuns de chaves/tokens; ele não autoriza registrar payloads completos. O runtime mantém captura genérica de `Exception` (incluindo `ProviderError`) para não importar adapters na aplicação, retornando mensagem amigável sem detalhes técnicos. A sanitização da mensagem é responsabilidade da borda, não do domínio.
+
+`GeminiAnalystAdapter` observa a mesma saúde, mas mantém exatamente o fallback `Insight indisponível devido a erro na API de análise.` e não propaga falhas de análise ao `ScanPortfolioUseCase`. O scanner continua calculando, persistindo e notificando oportunidades deterministicamente, sem depender da saúde do LLM. Nenhuma dependência, modelo configurado, schema de banco ou estratégia de deploy é alterada.
+
 ## 3. Estrutura de Pastas (context-first — núcleo em `src/`)
 
 ```
